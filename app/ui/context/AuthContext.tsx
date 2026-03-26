@@ -165,6 +165,7 @@ async function performTokenRefresh(
     grant_type: 'refresh_token',
     client_id: clientId,
     refresh_token: refreshToken,
+    redirect_uri: getRedirectUri(),
   });
 
   const response = await fetch(tokenEndpoint, {
@@ -263,7 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       throw new Error('Backend not configured');
     }
 
-    const codeVerifier = generateRandomString(40);
+    const codeVerifier = generateRandomString(65);
     const codeChallenge = await sha256AndBase64(codeVerifier);
 
     const pendingAuth: PendingAuth = {
@@ -276,7 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     const url = new URL(authorization_endpoint);
     url.searchParams.set('client_id', apiService.client_id);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', 'openid email');
+    url.searchParams.set('scope', apiService.scopes?.join(' ') || 'openid email');
     url.searchParams.set('redirect_uri', getRedirectUri());
     url.searchParams.set('code_challenge', codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
@@ -285,18 +286,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   }, [authorization_endpoint, token_endpoint, apiService]);
 
   const logout = useCallback(async () => {
-    if (!issuer || !end_session_endpoint || !apiService) {
+    if (!issuer || !apiService) {
       throw new Error('Backend not configured');
     }
 
     deleteToken(issuer, apiService.client_id);
 
-    const logoutUrl = `${location.protocol}//${location.host}`;
-    const url = new URL(end_session_endpoint);
-    url.searchParams.set('client_id', apiService.client_id);
-    url.searchParams.set('logout_uri', logoutUrl);
-
-    location.assign(url.toString());
+    if (end_session_endpoint) {
+      const logoutUrl = `${location.protocol}//${location.host}`;
+      const url = new URL(end_session_endpoint);
+      url.searchParams.set('client_id', apiService.client_id);
+      url.searchParams.set('logout_uri', logoutUrl);
+      location.assign(url.toString());
+    } else {
+      // If no end_session_endpoint is available, we can only perform a local logout.
+      // Reload the page to clear application state and reflect the new authentication status.
+      location.reload();
+    }
   }, [issuer, end_session_endpoint, apiService]);
 
   const { data: apiAccessToken, refetch: refetchAccessToken } = useQuery({

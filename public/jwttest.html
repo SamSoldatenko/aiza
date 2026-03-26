@@ -504,18 +504,21 @@
                 <span class="badge">Step 1</span>
             </div>
 
-            <form id="pkce-form" method="get"
-                action="https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/authorize">
+            <form id="pkce-form" method="get" action="">
                 <div class="form-grid">
+                    <label class="form-label">Authorization URL</label>
+                    <input type="text" id="authorization-url-input" class="form-input"
+                        placeholder="Loading from backend..." />
+
                     <label class="form-label">Client ID</label>
-                    <input type="text" name="client_id" value="41n5fausr4m817q9uko6rkb5ni" class="form-input"
-                        readonly />
+                    <input type="text" id="client-id-input" name="client_id" class="form-input"
+                        placeholder="Loading from backend..." />
 
                     <label class="form-label">Response Type</label>
                     <input type="text" name="response_type" value="code" class="form-input" readonly />
 
                     <label class="form-label">Scope</label>
-                    <input type="text" name="scope" value="openid email" class="form-input" />
+                    <input type="text" name="scope" id="scope-input" class="form-input" />
 
                     <label class="form-label">Redirect URI</label>
                     <input type="text" name="redirect_uri" class="form-input redirect_uri" />
@@ -537,6 +540,7 @@
 
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Open Login Page</button>
+                    <button type="button" class="btn btn-secondary" onclick="applyOpenIdConfig()">Reset to Config</button>
                 </div>
             </form>
         </section>
@@ -721,7 +725,54 @@
             prod: 'https://aiza-be.bin932.com:3150'
         };
 
+        const DEFAULT_TOKEN_ENDPOINT = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/token';
+        const DEFAULT_USERINFO_URL   = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/userInfo';
+        const DEFAULT_CLIENT_ID      = '41n5fausr4m817q9uko6rkb5ni';
+        const DEFAULT_SCOPE          = 'openid email';
+
         let currentBackend = null;
+        let openIdConfig = null; // { clientId, authorizationEndpoint, tokenEndpoint }
+
+        async function loadOpenIdConfig(backendUrl) {
+            try {
+                const infoRes = await fetch(backendUrl + '/info.json');
+                if (!infoRes.ok) return { config: null, reachable: false };
+                const info = await infoRes.json();
+                const openIdUrl = info['openid-configuration'];
+                if (!openIdUrl) return { config: null, reachable: true };
+                const openIdRes = await fetch(openIdUrl);
+                if (!openIdRes.ok) return { config: null, reachable: true };
+                const oidc = await openIdRes.json();
+                return {
+                    config: {
+                        clientId: info.api?.client_id || info.client_id || '',
+                        authorizationEndpoint: oidc.authorization_endpoint || '',
+                        tokenEndpoint: oidc.token_endpoint || '',
+                        userinfoEndpoint: oidc.userinfo_endpoint || '',
+                        revocationEndpoint: oidc.revocation_endpoint || ''
+                    },
+                    reachable: true
+                };
+            } catch (e) {
+                console.error('[openid] loadOpenIdConfig error:', e);
+                return { config: null, reachable: false };
+            }
+        }
+
+        function getTokenEndpointUrl() {
+            return openIdConfig?.tokenEndpoint || DEFAULT_TOKEN_ENDPOINT;
+        }
+
+        function applyOpenIdConfig() {
+            if (!openIdConfig) return;
+            $('#authorization-url-input').val(openIdConfig.authorizationEndpoint);
+            $('#client-id-input').val(openIdConfig.clientId);
+            const userinfoTest = TEST_ENDPOINTS.find(e => e.isExternal);
+            if (userinfoTest && openIdConfig.userinfoEndpoint) {
+                userinfoTest.url = openIdConfig.userinfoEndpoint;
+            }
+        }
+
 
         function initBackendSelector() {
             const select = $('#backend-select');
@@ -777,17 +828,17 @@
             const statusEl = $('#backend-status');
             statusEl.html('<span class="status-pending">Testing connection...</span>');
 
-            fetch(currentBackend + '/info.json', { method: 'GET' })
-                .then(r => {
-                    if (r.ok) {
-                        statusEl.html('<span class="status-success">&#10003; Connected to ' + currentBackend + '</span>');
-                    } else {
-                        statusEl.html('<span class="status-warning">&#9888; Reachable (status: ' + r.status + ')</span>');
-                    }
-                })
-                .catch(err => {
+            loadOpenIdConfig(currentBackend).then(({ config, reachable }) => {
+                if (config) {
+                    openIdConfig = config;
+                    applyOpenIdConfig();
+                    statusEl.html('<span class="status-success">&#10003; Connected to ' + currentBackend + '</span>');
+                } else if (reachable) {
+                    statusEl.html('<span class="status-warning">&#9888; Reachable but no OpenID config</span>');
+                } else {
                     statusEl.html('<span class="status-error">&#10007; Connection failed</span>');
-                });
+                }
+            });
         }
 
         function getBackendUrl() {
@@ -849,8 +900,6 @@
         // ============================================
         // Endpoint Testing Module
         // ============================================
-        const COGNITO_USERINFO_URL = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/userInfo';
-
         const TEST_ENDPOINTS = [
             {
                 path: '/hello/2',
@@ -901,7 +950,7 @@
                 name: 'userinfo',
                 access: 'authorized',
                 isExternal: true,
-                url: COGNITO_USERINFO_URL,
+                url: DEFAULT_USERINFO_URL,
                 expectedResults: {
                     'none': { shouldSucceed: false, expectedCode: 400 },
                     'valid-id': { shouldSucceed: false, expectedCode: 401 },
@@ -1199,10 +1248,11 @@
         }
 
         function getToken(code, codeVerifier) {
-            const url = "https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/token";
+            const url = getTokenEndpointUrl();
+            const clientId = $('#client-id-input').val().trim() || DEFAULT_CLIENT_ID;
             const formData = new URLSearchParams();
             formData.append("redirect_uri", guess_redirect_url());
-            formData.append("client_id", "41n5fausr4m817q9uko6rkb5ni");
+            formData.append("client_id", clientId);
             formData.append("code", code);
             formData.append("grant_type", "authorization_code");
             formData.append("code_verifier", codeVerifier);
@@ -1225,7 +1275,7 @@
         }
 
         function generate_verifier() {
-            const randomString = generateRandomString(40);
+            const randomString = generateRandomString(65);
             console.log('new code_verifier', randomString);
             localStorage.setItem('aiza_code_verifier', randomString);
             load_verifier_fields();
@@ -1261,11 +1311,12 @@
         function refresh_token(index) {
             var token = read_tokens()[index];
             var payload = parse_payload(token.access_token);
-            var url = "https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/token";
+            var url = getTokenEndpointUrl();
+            var clientId = $('#client-id-input').val().trim() || payload.client_id;
             var formData = new URLSearchParams();
             formData.append("redirect_uri", guess_redirect_url())
             formData.append("grant_type", "refresh_token");
-            formData.append("client_id", payload.client_id);
+            formData.append("client_id", clientId);
             formData.append("refresh_token", token.refresh_token);
             return fetch(url, {
                 method: "POST",
@@ -1283,10 +1334,12 @@
                             matchingTokens.forEach(t => {
                                 t.id_token = data.id_token;
                                 t.access_token = data.access_token;
+                                if (data.refresh_token) t.refresh_token = data.refresh_token;
                             });
                             if (matchingTokens.length == 0) {
                                 token.id_token = data.id_token;
                                 token.access_token = data.access_token;
+                                if (data.refresh_token) token.refresh_token = data.refresh_token;
                                 list = [...list, token]
                             }
                             write_tokens(list);
@@ -1312,6 +1365,7 @@
             updateTokensDisplay();
             load_verifier_fields();
             $('input.redirect_uri').val(guess_redirect_url());
+            $('#scope-input').val(DEFAULT_SCOPE);
 
             var matches = location.href.match('code=([^&]+)');
             if (matches) {
@@ -1321,6 +1375,11 @@
 
             $('#run-all-tests').on('click', runAllTests);
             $('#clear-results').on('click', clearTestResults);
+
+            $('#pkce-form').on('submit', function () {
+                const authUrl = $('#authorization-url-input').val().trim();
+                if (authUrl) $(this).attr('action', authUrl);
+            });
 
             console.log("JWT Debug page initialized at " + location.href);
         }
