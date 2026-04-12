@@ -8,7 +8,7 @@ interface AizaViewProps {
 
 export default function AizaView({ query }: AizaViewProps): React.ReactElement {
   return (
-    <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 min-h-[400px] flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+    <div className="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow-xs border border-gray-200 dark:border-gray-700 p-4 min-h-[400px] flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
       <GitBranch size={64} strokeWidth={1} />
       <p className="mt-4 text-sm">Visualization coming soon</p>
       <p className="mt-1 text-xs text-gray-300 dark:text-gray-600">

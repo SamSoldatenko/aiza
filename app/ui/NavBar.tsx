@@ -80,10 +80,12 @@ export default function NavBar(): React.ReactElement {
         anchor="left"
         open={drawerOpen}
         onClose={handleDrawerToggle}
-        PaperProps={{
-          sx: {
-            width: 280,
-            bgcolor: 'background.paper',
+        slotProps={{
+          paper: {
+            sx: {
+              width: 280,
+              bgcolor: 'background.paper',
+            },
           },
         }}
       >

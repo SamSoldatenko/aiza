@@ -28,7 +28,7 @@ export default function BackendStatusIndicator(): React.ReactElement {
 
   return (
     <Tooltip title={tooltipContent}>
-      <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${color}`}>
+      <div className={`flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium ${color}`}>
         <Server size={14} />
         <span>{backendLabel}</span>
         {icon}

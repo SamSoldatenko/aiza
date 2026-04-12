@@ -16,12 +16,14 @@ export default function SearchBox({ value, onChange }: SearchBoxProps): React.Re
       placeholder="Search..."
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <Search size={20} className="text-gray-400" />
-          </InputAdornment>
-        ),
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <Search size={20} className="text-gray-400" />
+            </InputAdornment>
+          ),
+        },
       }}
       sx={{
         '& .MuiOutlinedInput-root': {
