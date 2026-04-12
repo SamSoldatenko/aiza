@@ -10,6 +10,7 @@ exports[`Auth component > renders user button 1`] = `
       title="Not logged in"
     >
       <svg
+        aria-hidden="true"
         class="lucide lucide-user"
         fill="none"
         height="20"
