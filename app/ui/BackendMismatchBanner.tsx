@@ -1,16 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Alert, Button } from '@mui/material';
 import { useServerConfig } from './context/ServerConfigContext';
 
 export default function BackendMismatchBanner(): React.ReactElement | null {
   const { aizaJson } = useServerConfig();
-  const [currentOrigin, setCurrentOrigin] = useState('');
-
-  useEffect(() => {
-    setCurrentOrigin(window.location.origin);
-  }, []);
+  const [currentOrigin] = useState(() =>
+    typeof window !== 'undefined' ? window.location.origin : ''
+  );
 
   const expectedUrl = aizaJson?.web;
   const urlMismatch = expectedUrl && currentOrigin && currentOrigin !== expectedUrl;

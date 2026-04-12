@@ -41,6 +41,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined' || !window.matchMedia) return;
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSystemPrefersDark(mediaQuery.matches);
 
     const handler = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
@@ -55,6 +56,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSettings({ ...defaultSettings, ...parsed });
       } catch {
         setSettings(defaultSettings);
