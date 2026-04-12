@@ -78,12 +78,11 @@ async function fetchOpenIdConfig(url: string): Promise<OpenIdConfiguration> {
 }
 
 export function ServerConfigProvider({ children }: { children: React.ReactNode }) {
-  const [backendUrl, setBackendUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const storedBackendUrl = localStorage.getItem('aiza_current_backend');
-    setBackendUrl(storedBackendUrl || getDefaultBackend());
-  }, []);
+  const [backendUrl, setBackendUrl] = useState<string | null>(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('aiza_current_backend') || getDefaultBackend()
+      : null
+  );
 
   const {
     data: aizaJson,
@@ -110,11 +109,9 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
     staleTime: OPENID_STALE_TIME,
   });
 
-  const [issuerAllowlist, setIssuerAllowlist] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    setIssuerAllowlist(loadIssuerAllowlist());
-  }, []);
+  const [issuerAllowlist, setIssuerAllowlist] = useState<Record<string, string>>(() =>
+    typeof window !== 'undefined' ? loadIssuerAllowlist() : {}
+  );
 
   const { validatedOpenIdConfig, issuerError } = useMemo(() => {
     if (!openIdConfig || !backendUrl) return { validatedOpenIdConfig: null, issuerError: null };
@@ -127,6 +124,7 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
     if (!validatedOpenIdConfig || !backendUrl) return;
     if (issuerAllowlist[backendUrl]) return; // already known
     cacheIssuerBinding(backendUrl, validatedOpenIdConfig.issuer);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIssuerAllowlist((prev) => ({ ...prev, [backendUrl]: validatedOpenIdConfig.issuer }));
   }, [validatedOpenIdConfig, backendUrl, issuerAllowlist]);
 
