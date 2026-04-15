@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JWT and Login Debug Page</title>
+    <meta name="description" content="Page to debug JWT and authorization functionality" />
+    <style>
+        :root {
+            /* Colors */
+            --color-primary: #3b82f6;
+            --color-primary-hover: #2563eb;
+            --color-success: #22c55e;
+            --color-success-bg: #dcfce7;
+            --color-error: #ef4444;
+            --color-error-bg: #fee2e2;
+            --color-warning: #f59e0b;
+            --color-warning-bg: #fef3c7;
+            --color-neutral-50: #f8fafc;
+            --color-neutral-100: #f1f5f9;
+            --color-neutral-200: #e2e8f0;
+            --color-neutral-300: #cbd5e1;
+            --color-neutral-500: #64748b;
+            --color-neutral-700: #334155;
+            --color-neutral-900: #0f172a;
+
+            /* Typography */
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+
+            /* Spacing */
+            --spacing-1: 0.25rem;
+            --spacing-2: 0.5rem;
+            --spacing-3: 0.75rem;
+            --spacing-4: 1rem;
+            --spacing-6: 1.5rem;
+
+            /* Borders & Shadows */
+            --radius-sm: 4px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            font-size: var(--font-size-base);
+            line-height: 1.5;
+            color: var(--color-neutral-700);
+            background: var(--color-neutral-50);
+            margin: 0;
+            padding: var(--spacing-6);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1, h2, h3 {
+            color: var(--color-neutral-900);
+            margin-top: 0;
+            margin-bottom: var(--spacing-4);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: var(--spacing-2);
+        }
+
+        .page-description {
+            color: var(--color-neutral-500);
+            margin-bottom: var(--spacing-6);
+        }
+
+        /* Card Component */
+        .card {
+            background: white;
+            border: 1px solid var(--color-neutral-200);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-6);
+            margin-bottom: var(--spacing-6);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: var(--spacing-4);
+            padding-bottom: var(--spacing-3);
+            border-bottom: 1px solid var(--color-neutral-100);
+            gap: var(--spacing-4);
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: var(--font-size-lg);
+            font-weight: 600;
+        }
+
+        .card-description {
+            color: var(--color-neutral-500);
+            font-size: var(--font-size-sm);
+            margin-top: var(--spacing-1);
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: var(--spacing-1) var(--spacing-2);
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            background: var(--color-neutral-100);
+            color: var(--color-neutral-700);
+            white-space: nowrap;
+        }
+
+        .badge-success { background: var(--color-success-bg); color: var(--color-success); }
+        .badge-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+        .badge-error { background: var(--color-error-bg); color: var(--color-error); }
+
+        /* Form Styles */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: var(--spacing-3) var(--spacing-4);
+            align-items: center;
+        }
+
+        .form-label {
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            color: var(--color-neutral-700);
+        }
+
+        .form-hint {
+            font-size: var(--font-size-xs);
+            color: var(--color-neutral-500);
+            grid-column: 2;
+            margin-top: calc(-1 * var(--spacing-2));
+        }
+
+        .form-input,
+        .form-select {
+            width: 100%;
+            padding: var(--spacing-2) var(--spacing-3);
+            border: 1px solid var(--color-neutral-300);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-sm);
+            font-family: var(--font-mono);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .form-input:read-only {
+            background: var(--color-neutral-50);
+            color: var(--color-neutral-500);
+        }
+
+        .form-select {
+            cursor: pointer;
+        }
+
+        .form-actions {
+            margin-top: var(--spacing-4);
+            padding-top: var(--spacing-4);
+            border-top: 1px solid var(--color-neutral-100);
+        }
+
+        .input-with-action {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-2);
+        }
+
+        .input-with-action .code-display {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: var(--font-size-sm);
+            background: var(--color-neutral-50);
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--color-neutral-200);
+            word-break: break-all;
+            min-height: 36px;
+        }
+
+        /* Config Grid */
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-6);
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-2);
+        }
+
+        .backend-status {
+            font-size: var(--font-size-xs);
+            margin-top: var(--spacing-1);
+        }
+
+        .status-pending { color: var(--color-neutral-500); }
+        .status-success { color: var(--color-success); }
+        .status-warning { color: var(--color-warning); }
+        .status-error { color: var(--color-error); }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-2);
+            padding: var(--spacing-2) var(--spacing-4);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: var(--font-sans);
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+            text-decoration: none;
+        }
+
+        .btn-primary:hover {
+            background: var(--color-primary-hover);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--color-neutral-700);
+            border-color: var(--color-neutral-300);
+        }
+
+        .btn-secondary:hover {
+            background: var(--color-neutral-50);
+        }
+
+        .btn-sm {
+            padding: var(--spacing-1) var(--spacing-2);
+            font-size: var(--font-size-xs);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: var(--spacing-2);
+        }
+
+        /* Test Table */
+        .test-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--font-size-sm);
+        }
+
+        .test-table th,
+        .test-table td {
+            padding: var(--spacing-3);
+            text-align: left;
+            border-bottom: 1px solid var(--color-neutral-200);
+        }
+
+        .test-table th {
+            background: var(--color-neutral-50);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .test-table code {
+            font-family: var(--font-mono);
+            font-size: var(--font-size-xs);
+            background: var(--color-neutral-100);
+            padding: 2px 6px;
+            border-radius: var(--radius-sm);
+        }
+
+        .test-cell {
+            min-width: 120px;
+        }
+
+        .test-result {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-2);
+            cursor: pointer;
+        }
+
+        .test-result:hover {
+            opacity: 0.8;
+        }
+
+        .test-status {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            font-size: var(--font-size-xs);
+            font-weight: bold;
+        }
+
+        .test-status.pass { background: var(--color-success-bg); color: var(--color-success); }
+        .test-status.fail { background: var(--color-error-bg); color: var(--color-error); }
+        .test-status.pending { background: var(--color-neutral-100); color: var(--color-neutral-500); }
+
+        .test-http-code {
+            font-family: var(--font-mono);
+            font-size: var(--font-size-xs);
+            padding: 2px 6px;
+            border-radius: var(--radius-sm);
+            background: var(--color-neutral-100);
+        }
+
+        .test-http-code.code-2xx { background: var(--color-success-bg); color: var(--color-success); }
+        .test-http-code.code-4xx { background: var(--color-error-bg); color: var(--color-error); }
+        .test-http-code.code-5xx { background: var(--color-warning-bg); color: var(--color-warning); }
+
+        .test-time {
+            font-size: var(--font-size-xs);
+            color: var(--color-neutral-500);
+        }
+
+        /* Response Details */
+        .response-details {
+            margin-top: var(--spacing-4);
+            padding: var(--spacing-4);
+            background: var(--color-neutral-50);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--color-neutral-200);
+        }
+
+        .response-details h3 {
+            font-size: var(--font-size-sm);
+            margin-bottom: var(--spacing-2);
+        }
+
+        .response-details pre {
+            margin: 0;
+            font-family: var(--font-mono);
+            font-size: var(--font-size-xs);
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Tokens Display */
+        .tokens-list {
+            font-family: var(--font-mono);
+            font-size: var(--font-size-xs);
+        }
+
+        .token-item {
+            padding: var(--spacing-4);
+            border: 1px solid var(--color-neutral-200);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-4);
+            background: var(--color-neutral-50);
+        }
+
+        .token-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .token-summary {
+            word-break: break-all;
+            line-height: 1.6;
+        }
+
+        .token-actions {
+            margin-top: var(--spacing-3);
+            display: flex;
+            gap: var(--spacing-2);
+        }
+
+        .token-details {
+            margin-top: var(--spacing-3);
+            padding-top: var(--spacing-3);
+            border-top: 1px solid var(--color-neutral-200);
+        }
+
+        .token-details table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .token-details td {
+            padding: var(--spacing-1) var(--spacing-2);
+            vertical-align: top;
+        }
+
+        .token-details td:first-child {
+            font-weight: 600;
+            white-space: nowrap;
+            width: 100px;
+        }
+
+        .text-red { color: var(--color-error); }
+        .text-green { color: var(--color-success); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: var(--spacing-4);
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-hint {
+                grid-column: 1;
+            }
+
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .test-table {
+                display: block;
+                overflow-x: auto;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .card-header {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav style="margin-bottom: var(--spacing-4);">
+        <a href="/" class="btn btn-primary" style="font-size: var(--font-size-lg); padding: var(--spacing-3) var(--spacing-6);">
+            ← Back to AIZA
+        </a>
+    </nav>
+    <header>
+        <h1>JWT & Authentication Debug</h1>
+        <p class="page-description">Test OAuth2/PKCE flows and backend endpoint authorization</p>
+    </header>
+
+    <main>
+        <!-- Section 1: Configuration -->
+        <section class="card" id="config-section">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Configuration</h2>
+                    <p class="card-description">Select backend server for API requests</p>
+                </div>
+            </div>
+
+            <div class="config-item">
+                <label class="form-label">Backend Server</label>
+                <select id="backend-select" class="form-select" style="max-width: 400px;">
+                    <option value="dev">Dev (localhost:8080)</option>
+                    <option value="prod">Prod (aiza-be.bin932.com:3150)</option>
+                    <option value="custom">Custom URL...</option>
+                </select>
+                <input type="text" id="backend-custom" class="form-input" placeholder="https://your-server.com:port"
+                    style="display: none; max-width: 400px;" />
+                <div class="backend-status" id="backend-status"></div>
+            </div>
+        </section>
+
+        <!-- Section 2: PKCE Authorization Flow -->
+        <section class="card" id="pkce-section">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Authorization Code Grant (PKCE)</h2>
+                    <p class="card-description">Generate verifier and initiate OAuth2 login flow</p>
+                </div>
+                <span class="badge">Step 1</span>
+            </div>
+
+            <form id="pkce-form" method="get" action="">
+                <div class="form-grid">
+                    <label class="form-label">Authorization URL</label>
+                    <input type="text" id="authorization-url-input" class="form-input"
+                        placeholder="Loading from backend..." />
+
+                    <label class="form-label">Client ID</label>
+                    <input type="text" id="client-id-input" name="client_id" class="form-input"
+                        placeholder="Loading from backend..." />
+
+                    <label class="form-label">Response Type</label>
+                    <input type="text" name="response_type" value="code" class="form-input" readonly />
+
+                    <label class="form-label">Scope</label>
+                    <input type="text" name="scope" id="scope-input" class="form-input" />
+
+                    <label class="form-label">Redirect URI</label>
+                    <input type="text" name="redirect_uri" class="form-input redirect_uri" />
+
+                    <label class="form-label">Code Verifier</label>
+                    <div class="input-with-action">
+                        <span id="code-verifier-display" class="code-display code_verifier"></span>
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="generate_verifier()">Generate</button>
+                    </div>
+                    <p class="form-hint">Random string stored locally, used in Step 2</p>
+
+                    <label class="form-label">Code Challenge</label>
+                    <input type="text" name="code_challenge" class="form-input code_challenge" readonly />
+                    <p class="form-hint">SHA-256 hash of verifier (base64url encoded)</p>
+
+                    <input type="hidden" name="code_challenge_method" value="S256" />
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Open Login Page</button>
+                    <button type="button" class="btn btn-secondary" onclick="applyOpenIdConfig()">Reset to Config</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Section 3: Token Exchange -->
+        <section class="card" id="exchange-section">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Exchange Code for Token</h2>
+                    <p class="card-description">Exchange authorization code and verifier for JWT tokens</p>
+                </div>
+                <span class="badge">Step 2</span>
+            </div>
+
+            <div class="form-grid">
+                <label class="form-label">Auth Code</label>
+                <input type="text" class="form-input code" placeholder="Paste authorization code from URL" />
+
+                <label class="form-label">Code Verifier</label>
+                <input type="text" class="form-input code_verifier" readonly />
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn btn-primary" onclick="exchange_code_to_token()">Exchange for
+                    Token</button>
+            </div>
+        </section>
+
+        <!-- Section 4: Endpoint Testing Matrix -->
+        <section class="card" id="testing-section">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Endpoint Testing Matrix</h2>
+                    <p class="card-description">Test backend endpoints with different authorization scenarios</p>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-secondary btn-sm" id="clear-results">Clear</button>
+                    <button class="btn btn-primary" id="run-all-tests">Run All Tests</button>
+                </div>
+            </div>
+
+            <table class="test-table" style="margin-bottom: var(--spacing-4); font-size: var(--font-size-xs); font-family: var(--font-mono);">
+                <tbody>
+                    <tr>
+                        <td style="width: 150px;"><strong>Valid Token (id)</strong></td>
+                        <td><span id="valid-token-id-display" style="color: var(--color-neutral-500);">(none)</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Valid Token (access)</strong></td>
+                        <td><span id="valid-token-access-display" style="color: var(--color-neutral-500);">(none)</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Invalid Token</strong></td>
+                        <td><code style="background: var(--color-neutral-100); padding: 2px 6px; border-radius: var(--radius-sm);">invalid.jwt.token.for.testing</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table class="test-table" id="test-matrix">
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Access Level</th>
+                        <th class="test-cell">No Token</th>
+                        <th class="test-cell">Valid (id)</th>
+                        <th class="test-cell">Valid (access)</th>
+                        <th class="test-cell">Invalid Token</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr data-endpoint="/hello/2">
+                        <td><code>/hello/2</code></td>
+                        <td><span class="badge badge-success">Public</span></td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello2-none">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello2-valid-id">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello2-valid-access">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello2-invalid">-</div>
+                        </td>
+                    </tr>
+                    <tr data-endpoint="/hello/3">
+                        <td><code>/hello/3</code></td>
+                        <td><span class="badge badge-warning">Authorized</span></td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello3-none">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello3-valid-id">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello3-valid-access">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello3-invalid">-</div>
+                        </td>
+                    </tr>
+                    <tr data-endpoint="/hello/4">
+                        <td><code>/hello/4</code></td>
+                        <td><span class="badge badge-error">Admin</span></td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello4-none">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello4-valid-id">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello4-valid-access">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-hello4-invalid">-</div>
+                        </td>
+                    </tr>
+                    <tr data-endpoint="/accounts/me">
+                        <td><code>/accounts/me</code></td>
+                        <td><span class="badge badge-warning">Authorized</span></td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-me-none">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-me-valid-id">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-me-valid-access">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-me-invalid">-</div>
+                        </td>
+                    </tr>
+                    <tr data-endpoint="userInfo">
+                        <td><code>oauth2/userInfo</code></td>
+                        <td><span class="badge badge-warning">Authorized</span></td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-userinfo-none">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-userinfo-valid-id">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-userinfo-valid-access">-</div>
+                        </td>
+                        <td class="test-cell">
+                            <div class="test-result" id="result-userinfo-invalid">-</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div id="response-details" class="response-details" style="display: none;">
+                <h3>Response Details</h3>
+                <pre id="response-body"></pre>
+            </div>
+        </section>
+
+        <!-- Section 5: Stored Tokens -->
+        <section class="card" id="tokens-section">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Stored Tokens</h2>
+                    <p class="card-description">JWT tokens stored in localStorage</p>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="print_tokens()">Refresh</button>
+            </div>
+
+            <div class="tokens-list" id="tokens-report"></div>
+        </section>
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"
+        integrity="sha256-kmHvs0B+OpCW5GVHUNjv9rOmY0IvSIRcf7zGUDTDQM8=" crossorigin="anonymous"></script>
+    <script type="application/javascript">
+        // ============================================
+        // Backend Configuration Module
+        // ============================================
+        const BACKENDS = {
+            dev: 'http://localhost:8080',
+            prod: 'https://aiza-be.bin932.com:3150'
+        };
+
+        const DEFAULT_TOKEN_ENDPOINT = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/token';
+        const DEFAULT_USERINFO_URL   = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/userInfo';
+        const DEFAULT_CLIENT_ID      = '41n5fausr4m817q9uko6rkb5ni';
+        const DEFAULT_SCOPE          = 'openid email';
+
+        let currentBackend = null;
+        let openIdConfig = null; // { clientId, authorizationEndpoint, tokenEndpoint }
+
+        async function loadOpenIdConfig(backendUrl) {
+            try {
+                const infoRes = await fetch(backendUrl + '/info.json');
+                if (!infoRes.ok) return { config: null, reachable: false };
+                const info = await infoRes.json();
+                const openIdUrl = info['openid-configuration'];
+                if (!openIdUrl) return { config: null, reachable: true };
+                const openIdRes = await fetch(openIdUrl);
+                if (!openIdRes.ok) return { config: null, reachable: true };
+                const oidc = await openIdRes.json();
+                return {
+                    config: {
+                        clientId: info.api?.client_id || info.client_id || '',
+                        authorizationEndpoint: oidc.authorization_endpoint || '',
+                        tokenEndpoint: oidc.token_endpoint || '',
+                        userinfoEndpoint: oidc.userinfo_endpoint || '',
+                        revocationEndpoint: oidc.revocation_endpoint || ''
+                    },
+                    reachable: true
+                };
+            } catch (e) {
+                console.error('[openid] loadOpenIdConfig error:', e);
+                return { config: null, reachable: false };
+            }
+        }
+
+        function getTokenEndpointUrl() {
+            return openIdConfig?.tokenEndpoint || DEFAULT_TOKEN_ENDPOINT;
+        }
+
+        function applyOpenIdConfig() {
+            if (!openIdConfig) return;
+            $('#authorization-url-input').val(openIdConfig.authorizationEndpoint);
+            $('#client-id-input').val(openIdConfig.clientId);
+            const userinfoTest = TEST_ENDPOINTS.find(e => e.isExternal);
+            if (userinfoTest && openIdConfig.userinfoEndpoint) {
+                userinfoTest.url = openIdConfig.userinfoEndpoint;
+            }
+        }
+
+
+        function initBackendSelector() {
+            const select = $('#backend-select');
+            const customInput = $('#backend-custom');
+
+            // Auto-detect default based on current URL
+            if (location.host === 'localhost:3000') {
+                currentBackend = BACKENDS.dev;
+                select.val('dev');
+            } else {
+                currentBackend = BACKENDS.prod;
+                select.val('prod');
+            }
+
+            // Check localStorage for saved preference
+            const savedBackend = localStorage.getItem('jwttest_backend');
+            if (savedBackend) {
+                if (BACKENDS[savedBackend]) {
+                    currentBackend = BACKENDS[savedBackend];
+                    select.val(savedBackend);
+                } else {
+                    currentBackend = savedBackend;
+                    select.val('custom');
+                    customInput.val(savedBackend).show();
+                }
+            }
+
+            updateBackendStatus();
+
+            select.on('change', function () {
+                const value = $(this).val();
+                if (value === 'custom') {
+                    customInput.show().focus();
+                } else {
+                    customInput.hide();
+                    currentBackend = BACKENDS[value];
+                    localStorage.setItem('jwttest_backend', value);
+                    updateBackendStatus();
+                }
+            });
+
+            customInput.on('blur', function () {
+                const url = $(this).val().trim();
+                if (url) {
+                    currentBackend = url.replace(/\/$/, '');
+                    localStorage.setItem('jwttest_backend', currentBackend);
+                    updateBackendStatus();
+                }
+            });
+        }
+
+        function updateBackendStatus() {
+            const statusEl = $('#backend-status');
+            statusEl.html('<span class="status-pending">Testing connection...</span>');
+
+            loadOpenIdConfig(currentBackend).then(({ config, reachable }) => {
+                if (config) {
+                    openIdConfig = config;
+                    applyOpenIdConfig();
+                    statusEl.html('<span class="status-success">&#10003; Connected to ' + currentBackend + '</span>');
+                } else if (reachable) {
+                    statusEl.html('<span class="status-warning">&#9888; Reachable but no OpenID config</span>');
+                } else {
+                    statusEl.html('<span class="status-error">&#10007; Connection failed</span>');
+                }
+            });
+        }
+
+        function getBackendUrl() {
+            return currentBackend;
+        }
+
+        // ============================================
+        // Token Helper Functions
+        // ============================================
+        const INVALID_TOKEN = 'invalid.jwt.token.for.testing';
+
+        function getTokenForRequest(mode) {
+            const tokens = read_tokens();
+            switch (mode) {
+                case 'none':
+                    return null;
+                case 'invalid':
+                    return INVALID_TOKEN;
+                case 'valid-id':
+                    return tokens[0]?.id_token || null;
+                case 'valid-access':
+                    return tokens[0]?.access_token || null;
+                default:
+                    return null;
+            }
+        }
+
+        function formatTokenDisplay(token, usernameFields) {
+            try {
+                const payload = parse_payload(token);
+                const exp = new Date(payload.exp * 1000);
+                const isExpired = exp < new Date();
+                const username = usernameFields.reduce((found, field) => found || payload[field], null) || 'Unknown';
+                const truncated = token.substring(0, 20) + '...' + token.substring(token.length - 8);
+                const statusColor = isExpired ? 'var(--color-error)' : 'var(--color-success)';
+                const statusText = isExpired ? 'EXPIRED' : 'valid';
+                return `<span style="color: ${statusColor};">${username} (${statusText})</span><br/><code style="background: var(--color-neutral-100); padding: 2px 6px; border-radius: var(--radius-sm);">${truncated}</code>`;
+            } catch (e) {
+                return '(parse error)';
+            }
+        }
+
+        function updateTokensDisplay() {
+            const tokens = read_tokens();
+            const idDisplayEl = $('#valid-token-id-display');
+            const accessDisplayEl = $('#valid-token-access-display');
+
+            if (tokens.length === 0) {
+                const noTokenMsg = '<span style="color: var(--color-error);">(no token)</span>';
+                idDisplayEl.html(noTokenMsg);
+                accessDisplayEl.html(noTokenMsg);
+                return;
+            }
+
+            idDisplayEl.html(formatTokenDisplay(tokens[0].id_token, ['username', 'sub', 'email']));
+            accessDisplayEl.html(formatTokenDisplay(tokens[0].access_token, ['username', 'sub']));
+        }
+
+        // ============================================
+        // Endpoint Testing Module
+        // ============================================
+        const TEST_ENDPOINTS = [
+            {
+                path: '/hello/2',
+                name: 'hello2',
+                access: 'public',
+                expectedResults: {
+                    'none': { shouldSucceed: true },
+                    'valid-id': { shouldSucceed: true },
+                    'valid-access': { shouldSucceed: true },
+                    'invalid': { shouldSucceed: true }
+                }
+            },
+            {
+                path: '/hello/3',
+                name: 'hello3',
+                access: 'authorized',
+                expectedResults: {
+                    'none': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-id': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-access': { shouldSucceed: true },
+                    'invalid': { shouldSucceed: false, expectedCode: 401 }
+                }
+            },
+            {
+                path: '/hello/4',
+                name: 'hello4',
+                access: 'admin',
+                expectedResults: {
+                    'none': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-id': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-access': { shouldSucceed: false, expectedCode: 403 },
+                    'invalid': { shouldSucceed: false, expectedCode: 401 }
+                }
+            },
+            {
+                path: '/accounts/me',
+                name: 'me',
+                access: 'authorized',
+                expectedResults: {
+                    'none': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-id': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-access': { shouldSucceed: true },
+                    'invalid': { shouldSucceed: false, expectedCode: 401 }
+                }
+            },
+            {
+                path: 'userInfo',
+                name: 'userinfo',
+                access: 'authorized',
+                isExternal: true,
+                url: DEFAULT_USERINFO_URL,
+                expectedResults: {
+                    'none': { shouldSucceed: false, expectedCode: 400 },
+                    'valid-id': { shouldSucceed: false, expectedCode: 401 },
+                    'valid-access': { shouldSucceed: true },
+                    'invalid': { shouldSucceed: false, expectedCode: 401 }
+                }
+            }
+        ];
+
+        const TOKEN_MODES = ['none', 'valid-id', 'valid-access', 'invalid'];
+
+        async function runSingleTest(endpoint, tokenMode) {
+            const resultId = `result-${endpoint.name}-${tokenMode}`;
+            const resultEl = $(`#${resultId}`);
+
+            resultEl.html('<span class="test-status pending">...</span>');
+
+            const token = getTokenForRequest(tokenMode);
+
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = 'Bearer ' + token;
+            }
+
+            // Determine URL - external endpoints have their own URL, others use backend
+            const requestUrl = endpoint.isExternal ? endpoint.url : getBackendUrl() + endpoint.path;
+
+            const startTime = performance.now();
+
+            try {
+                const response = await fetch(requestUrl, {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const elapsed = Math.round(performance.now() - startTime);
+                const body = await response.text();
+
+                const expected = endpoint.expectedResults[tokenMode];
+                const actualSuccess = response.ok;
+
+                // For admin endpoint with valid access token, both 200 (admin user) and 403 (non-admin) are valid
+                let matchesExpectation;
+                if (endpoint.access === 'admin' && tokenMode === 'valid-access') {
+                    matchesExpectation = response.status === 200 || response.status === 403;
+                } else {
+                    matchesExpectation = expected.shouldSucceed === actualSuccess ||
+                        (!expected.shouldSucceed && response.status === expected.expectedCode);
+                }
+
+                renderTestResult(resultEl, {
+                    success: actualSuccess,
+                    matchesExpectation: matchesExpectation,
+                    status: response.status,
+                    elapsed: elapsed,
+                    body: body,
+                    url: requestUrl
+                });
+
+                return { endpoint, tokenMode, response, body };
+
+            } catch (error) {
+                renderTestResult(resultEl, {
+                    success: false,
+                    matchesExpectation: false,
+                    status: 'ERR',
+                    error: error.message,
+                    elapsed: Math.round(performance.now() - startTime),
+                    url: requestUrl
+                });
+                return { endpoint, tokenMode, error };
+            }
+        }
+
+        function getHttpCodeClass(status) {
+            if (status >= 200 && status < 300) return 'code-2xx';
+            if (status >= 400 && status < 500) return 'code-4xx';
+            if (status >= 500) return 'code-5xx';
+            return '';
+        }
+
+        function renderTestResult(el, result) {
+            const statusClass = result.matchesExpectation ? 'pass' : 'fail';
+            const statusIcon = result.matchesExpectation ? '&#10003;' : '&#10007;';
+            const codeClass = getHttpCodeClass(result.status);
+
+            el.html(`
+                <span class="test-status ${statusClass}">${statusIcon}</span>
+                <span class="test-http-code ${codeClass}">${result.status}</span>
+                <span class="test-time">${result.elapsed || '-'}ms</span>
+            `);
+
+            el.data('result', result);
+
+            el.off('click').on('click', function () {
+                showResponseDetails(result);
+            });
+        }
+
+        async function runAllTests() {
+            const btn = $('#run-all-tests');
+            btn.prop('disabled', true).text('Running...');
+
+            const tokens = read_tokens();
+            if (tokens.length === 0) {
+                alert('No tokens stored. Tests with "Valid Token" will fail. Complete login flow first for full testing.');
+            }
+
+            for (const endpoint of TEST_ENDPOINTS) {
+                for (const tokenMode of TOKEN_MODES) {
+                    await runSingleTest(endpoint, tokenMode);
+                    await new Promise(r => setTimeout(r, 50));
+                }
+            }
+
+            btn.prop('disabled', false).text('Run All Tests');
+        }
+
+        function clearTestResults() {
+            TEST_ENDPOINTS.forEach(ep => {
+                TOKEN_MODES.forEach(mode => {
+                    $(`#result-${ep.name}-${mode}`).html('-').removeData('result');
+                });
+            });
+            $('#response-details').hide();
+        }
+
+        function showResponseDetails(result) {
+            const detailsEl = $('#response-details');
+            const bodyEl = $('#response-body');
+
+            let content = `Request: ${result.url || '(unknown)'}\n`;
+            content += `Status: ${result.status}\n`;
+            content += `Time: ${result.elapsed}ms\n`;
+            content += `Match: ${result.matchesExpectation ? 'Expected' : 'Unexpected'}\n`;
+            content += `---\n`;
+
+            if (result.body) {
+                try {
+                    content += JSON.stringify(JSON.parse(result.body), null, 2);
+                } catch {
+                    content += result.body;
+                }
+            } else if (result.error) {
+                content += `Error: ${result.error}`;
+            }
+
+            bodyEl.text(content);
+            detailsEl.show();
+        }
+
+        // ============================================
+        // Token Storage Functions (existing, updated)
+        // ============================================
+        function read_tokens() {
+            return JSON.parse(localStorage.getItem('aiza_tokens') || '[]');
+        }
+
+        function write_tokens(tokens) {
+            localStorage.setItem('aiza_tokens', JSON.stringify(tokens));
+        }
+
+        function parse_payload(s) {
+            const parts = s.split('.');
+            return JSON.parse(atob(parts[1]));
+        }
+
+        function merge_tokens(tokens, token) {
+            const payload = parse_payload(token.access_token);
+            const existingIndex = tokens.findIndex(t => {
+                const p = parse_payload(t.access_token);
+                return payload.iss === p.iss && payload.client_id === p.client_id && payload.scope === p.scope;
+            });
+
+            if (existingIndex >= 0) {
+                const result = [...tokens];
+                result[existingIndex] = token;
+                return result;
+            }
+            return [...tokens, token];
+        }
+
+        function formatTokenSummary(token) {
+            return JSON.stringify(token, null, 2)
+                .replaceAll('\n', '<br/>\n')
+                .replaceAll('\n  ', '\n&nbsp;&nbsp;')
+                .replaceAll(new RegExp(': "(([^"]{25})[^"]{10,}([^"]{6}))"', 'ig'),
+                    ': "$2...<button class="btn btn-sm btn-secondary" title="Copy to clipboard" onclick=\'copy_to_buffer("$1")\'>Copy</button>"');
+        }
+
+        function renderTokenDetails(token) {
+            const tokenTypes = [
+                { label: 'ID Token', key: 'id_token' },
+                { label: 'Access Token', key: 'access_token' },
+                { label: 'Refresh Token', key: 'refresh_token' }
+            ];
+            return tokenTypes.map(({ label, key }) =>
+                `<b>${label}:</b><br/>\n${decode_token(token[key])}<br/>\n`
+            ).join('');
+        }
+
+        function print_tokens() {
+            const tokens = read_tokens();
+
+            if (tokens.length === 0) {
+                $('#tokens-report').html('<p style="color: var(--color-neutral-500);">No tokens stored. Complete the login flow to get tokens.</p>');
+                updateTokensDisplay();
+                return;
+            }
+
+            const html = tokens.map((token, i) => `
+                <div class="token-item">
+                    <div class="token-summary">${formatTokenSummary(token)}</div>
+                    <div class="token-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="$('#token_detail_${i}').toggle()">Details</button>
+                        <button class="btn btn-sm btn-secondary" onclick="refresh_token(${i})">Refresh Token</button>
+                        <button class="btn btn-sm btn-secondary" onclick="delete_token(${i})">Delete</button>
+                    </div>
+                    <div class="token-details" style="display:none" id="token_detail_${i}">
+                        ${renderTokenDetails(token)}
+                    </div>
+                </div>
+            `).join('');
+
+            $('#tokens-report').html(html);
+            updateTokensDisplay();
+        }
+
+        function delete_token(index) {
+            if (!confirm('Delete this token?')) return;
+            const tokens = read_tokens();
+            tokens.splice(index, 1);
+            write_tokens(tokens);
+            print_tokens();
+        }
+
+        function copy_to_buffer(s) {
+            navigator.clipboard.writeText(s).catch(console.error);
+        }
+
+        function formatTimestamp(epochSeconds, label, checkExpiry) {
+            const date = new Date(epochSeconds * 1000);
+            const isExpired = checkExpiry && date < new Date();
+            const className = checkExpiry ? (isExpired ? 'text-red' : 'text-green') : '';
+            return `<tr><td>${label}:</td><td class="${className}">${date.toISOString()}</td></tr>\n`;
+        }
+
+        function decode_token(s) {
+            const parts = s.split('.');
+            let res = '';
+            let timeinfo = '';
+
+            for (const p of parts) {
+                try {
+                    const j = JSON.parse(atob(p));
+                    res += '<tr><td></td><td>' +
+                        JSON.stringify(j, null, 2)
+                            .replaceAll('\n', '<br/>\n')
+                            .replaceAll('\n  ', '\n&nbsp;&nbsp;')
+                        + '</td></tr>\n';
+                    if (j.auth_time) timeinfo += formatTimestamp(j.auth_time, 'Auth Time', false);
+                    if (j.exp) timeinfo += formatTimestamp(j.exp, 'Expires', true);
+                    if (j.iat) timeinfo += formatTimestamp(j.iat, 'Issued', false);
+                } catch (error) {
+                    res += '<tr><td></td><td>' + p.substring(0, 10) + '...</td><tr/>\n';
+                }
+            }
+
+            if (timeinfo === '') {
+                timeinfo = '<tr><td>Expires:</td><td>-</td></td>\n';
+            }
+            return '<table>\n' + timeinfo + res + '</table>\n';
+        }
+
+        // ============================================
+        // PKCE & Token Exchange Functions (existing)
+        // ============================================
+        async function sha256AndBase64(input) {
+            const buffer = new TextEncoder().encode(input);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = new Uint8Array(hashBuffer);
+            const base64String = btoa(String.fromCharCode.apply(null, hashArray));
+            return base64String.replace('+', '-').replace('/', '_').replace(/=+$/, '');
+        }
+
+        function generateRandomString(length) {
+            const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            return Array.from({ length }, () => charset[Math.floor(Math.random() * charset.length)]).join('');
+        }
+
+        function guess_redirect_url() {
+            return location.host === 'localhost:3000'
+                ? 'http://localhost:3000/jwttest.html'
+                : 'https://aiza.bin932.com/jwttest.html';
+        }
+
+        function getToken(code, codeVerifier) {
+            const url = getTokenEndpointUrl();
+            const clientId = $('#client-id-input').val().trim() || DEFAULT_CLIENT_ID;
+            const formData = new URLSearchParams();
+            formData.append("redirect_uri", guess_redirect_url());
+            formData.append("client_id", clientId);
+            formData.append("code", code);
+            formData.append("grant_type", "authorization_code");
+            formData.append("code_verifier", codeVerifier);
+
+            return fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData
+            }).then(r => {
+                if (r.ok) {
+                    return r.json().then(data => {
+                        console.log(JSON.stringify(data, null, 2));
+                        return data;
+                    });
+                }
+                console.error(r);
+                r.text().then(console.error);
+                return null;
+            });
+        }
+
+        function generate_verifier() {
+            const randomString = generateRandomString(65);
+            console.log('new code_verifier', randomString);
+            localStorage.setItem('aiza_code_verifier', randomString);
+            load_verifier_fields();
+            return false;
+        }
+
+        function load_verifier_fields() {
+            const code_verifier = localStorage.getItem('aiza_code_verifier');
+            $('input.code_verifier').val(code_verifier || '');
+            $('.code_verifier').not('input').text(code_verifier || '(none - click Generate)');
+            if (code_verifier) {
+                sha256AndBase64(code_verifier).then(v => $('input.code_challenge').val(v));
+            } else {
+                $('input.code_challenge').val('');
+            }
+        }
+
+        function exchange_code_to_token() {
+            const codeVerifier = $('input.code_verifier').val();
+            const code = $('input.code').val();
+            console.log("Exchange code to token code: ", code, "verifier:", codeVerifier);
+
+            getToken(code, codeVerifier).then(token => {
+                if (!token) return;
+                const tokens = merge_tokens(read_tokens(), token);
+                write_tokens(tokens);
+                localStorage.removeItem('aiza_code_verifier');
+                load_verifier_fields();
+                location.assign(guess_redirect_url());
+            });
+        }
+
+        function refresh_token(index) {
+            var token = read_tokens()[index];
+            var payload = parse_payload(token.access_token);
+            var url = getTokenEndpointUrl();
+            var clientId = $('#client-id-input').val().trim() || payload.client_id;
+            var formData = new URLSearchParams();
+            formData.append("redirect_uri", guess_redirect_url())
+            formData.append("grant_type", "refresh_token");
+            formData.append("client_id", clientId);
+            formData.append("refresh_token", token.refresh_token);
+            return fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: formData
+            })
+                .then(r => {
+                    if (r.ok) {
+                        return r.json().then(data => {
+                            console.log(JSON.stringify(data, null, 2));
+                            var list = read_tokens();
+                            var matchingTokens = list.filter(t => t.refresh_token == token.refresh_token);
+                            matchingTokens.forEach(t => {
+                                t.id_token = data.id_token;
+                                t.access_token = data.access_token;
+                                if (data.refresh_token) t.refresh_token = data.refresh_token;
+                            });
+                            if (matchingTokens.length == 0) {
+                                token.id_token = data.id_token;
+                                token.access_token = data.access_token;
+                                if (data.refresh_token) token.refresh_token = data.refresh_token;
+                                list = [...list, token]
+                            }
+                            write_tokens(list);
+                            print_tokens();
+                            return data;
+                        });
+                    } else {
+                        console.error(r);
+                        r.text().then(console.error);
+                        alert('Token refresh failed. See console for details.');
+                        return null;
+                    }
+                });
+        }
+
+        // ============================================
+        // Initialization
+        // ============================================
+        function init() {
+            initBackendSelector();
+
+            print_tokens();
+            updateTokensDisplay();
+            load_verifier_fields();
+            $('input.redirect_uri').val(guess_redirect_url());
+            $('#scope-input').val(DEFAULT_SCOPE);
+
+            var matches = location.href.match('code=([^&]+)');
+            if (matches) {
+                $('input.code').val(matches[1]);
+                document.getElementById('exchange-section').scrollIntoView({ behavior: 'smooth' });
+            }
+
+            $('#run-all-tests').on('click', runAllTests);
+            $('#clear-results').on('click', clearTestResults);
+
+            $('#pkce-form').on('submit', function () {
+                const authUrl = $('#authorization-url-input').val().trim();
+                if (authUrl) $(this).attr('action', authUrl);
+            });
+
+            console.log("JWT Debug page initialized at " + location.href);
+        }
+
+        $(init);
+    </script>
+</body>
+
+</html>

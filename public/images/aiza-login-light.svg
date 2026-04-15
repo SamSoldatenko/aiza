@@ -1,0 +1,38 @@
+<svg
+  width="300"
+  height="120"
+  viewBox="0 0 300 120"
+  xmlns="http://www.w3.org/2000/svg"
+>
+
+  <!-- Flower group -->
+  <g transform="translate(52,60)">
+    <!-- Petals -->
+    <g fill="white" stroke="#222" stroke-width="3">
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(0, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(40, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(80, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(120, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(160, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(200, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(240, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(280, 0, 0)"/>
+      <ellipse cx="0" cy="-28" rx="9" ry="20" transform="rotate(320, 0, 0)"/>
+    </g>
+
+    <!-- Center -->
+    <circle cx="0" cy="0" r="14" fill="#7ED321" stroke="#222" stroke-width="3"/>
+    <!-- Glare -->
+    <circle cx="-4" cy="-4" r="5" fill="white" opacity="0.45"/>
+  </g>
+
+  <!-- Text -->
+  <text x="106" y="72"
+        font-family="Inter, Arial, sans-serif"
+        font-size="56"
+        font-weight="700"
+        fill="#111">
+    AIZA
+  </text>
+
+</svg>
