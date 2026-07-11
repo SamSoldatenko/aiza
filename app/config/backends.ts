@@ -38,6 +38,11 @@ function getCachedIssuers(): Record<string, string> {
   return JSON.parse(localStorage.getItem(CACHED_ISSUERS_KEY) || '{}');
 }
 
+export function getKnownBackends(): string[] {
+  const cached = getCachedIssuers();
+  return Object.keys(cached).filter((url) => !(url in BACKEND_ISSUERS));
+}
+
 export function loadIssuerAllowlist(): Record<string, string> {
   const cached = getCachedIssuers();
   let changed = false;
