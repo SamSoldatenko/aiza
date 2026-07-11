@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useCallback, useEffect } from 'react';
+import { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useServerConfig } from './ServerConfigContext';
 
@@ -48,7 +48,7 @@ interface OAuthUserInfo {
 interface AuthContextValue {
   backendUserInfo: BackendUserInfo | null;
   oauthUserInfo: OAuthUserInfo | null;
-  apiAccessToken: string | null;
+  getApiAccessToken: () => Promise<string | null>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   handleOAuthCallback: (code: string) => Promise<void>;
@@ -64,8 +64,6 @@ class TokenRevokedError extends Error {
 }
 
 const RANDOM_CHARSET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const ACCESS_TOKEN_STALE_TIME = 30 * 1000; // 30 seconds
-const ACCESS_TOKEN_REFETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const BACKEND_USER_STALE_TIME = 60 * 1000; // 1 minute
 const OAUTH_USER_STALE_TIME = 60 * 60 * 1000; // 1 hour
 
@@ -259,6 +257,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const apiService = aizaJson?.api;
   const { issuer, token_endpoint, authorization_endpoint, end_session_endpoint, userinfo_endpoint } = openIdConfig ?? {};
 
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    if (!issuer || !apiService) return;
+    setIsAuthenticated(!!loadToken(issuer, apiService.client_id));
+  }, [issuer, apiService]);
+
   const login = useCallback(async () => {
     if (!authorization_endpoint || !token_endpoint || !apiService) {
       throw new Error('Backend not configured');
@@ -291,6 +296,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     }
 
     deleteToken(issuer, apiService.client_id);
+    setIsAuthenticated(false);
 
     if (end_session_endpoint) {
       const logoutUrl = `${location.protocol}//${location.host}`;
@@ -305,13 +311,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     }
   }, [issuer, end_session_endpoint, apiService]);
 
-  const { data: apiAccessToken, refetch: refetchAccessToken } = useQuery({
-    queryKey: ['apiAccessToken', issuer, apiService?.client_id],
-    queryFn: () => fetchAccessToken(issuer!, apiService!.client_id, token_endpoint!),
-    enabled: !!issuer && !!apiService && !!token_endpoint,
-    staleTime: ACCESS_TOKEN_STALE_TIME,
-    refetchInterval: ACCESS_TOKEN_REFETCH_INTERVAL,
-  });
+  const getApiAccessToken = useCallback(async (): Promise<string | null> => {
+    if (!issuer || !apiService || !token_endpoint) return null;
+    const token = await fetchAccessToken(issuer, apiService.client_id, token_endpoint);
+    setIsAuthenticated(token !== null);
+    return token;
+  }, [issuer, apiService, token_endpoint]);
 
   const handleOAuthCallback = useCallback(async (code: string) => {
     const pendingAuthStr = localStorage.getItem('aiza_pending_auth');
@@ -330,20 +335,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
     storeToken(response);
     localStorage.removeItem('aiza_pending_auth');
-    refetchAccessToken();
-  }, [refetchAccessToken]);
+    setIsAuthenticated(true);
+  }, []);
 
-  const { data: backendUserInfo, error: backendUserError } = useQuery({
-    queryKey: ['backendUserInfo', backendUrl, apiAccessToken],
-    queryFn: () => fetchBackendUserInfo(backendUrl!, apiAccessToken!),
-    enabled: !!backendUrl && !!apiAccessToken,
+  const { data: backendUserInfo, error: backendUserError, refetch: refetchBackendUserInfo } = useQuery({
+    queryKey: ['backendUserInfo', backendUrl, isAuthenticated],
+    queryFn: async () => {
+      const token = await getApiAccessToken();
+      return token ? fetchBackendUserInfo(backendUrl!, token) : null;
+    },
+    enabled: !!backendUrl && isAuthenticated,
     staleTime: BACKEND_USER_STALE_TIME,
   });
 
-  const { data: oauthUserInfo, error: oauthUserError } = useQuery({
-    queryKey: ['oauthUserInfo', userinfo_endpoint, apiAccessToken],
-    queryFn: () => fetchOAuthUserInfo(userinfo_endpoint!, apiAccessToken!),
-    enabled: !!userinfo_endpoint && !!apiAccessToken,
+  const { data: oauthUserInfo, error: oauthUserError, refetch: refetchOauthUserInfo } = useQuery({
+    queryKey: ['oauthUserInfo', userinfo_endpoint, isAuthenticated],
+    queryFn: async () => {
+      const token = await getApiAccessToken();
+      return token ? fetchOAuthUserInfo(userinfo_endpoint!, token) : null;
+    },
+    enabled: !!userinfo_endpoint && isAuthenticated,
     staleTime: OAUTH_USER_STALE_TIME,
   });
 
@@ -364,20 +375,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       (refreshResponse) => {
         if (refreshResponse) {
           updateToken(refreshResponse);
-          refetchAccessToken();
+          refetchBackendUserInfo();
+          refetchOauthUserInfo();
         } else {
           logout();
         }
       }
     );
-  }, [tokenRevoked, token_endpoint, apiService, issuer, logout, refetchAccessToken]);
+  }, [tokenRevoked, token_endpoint, apiService, issuer, logout, refetchBackendUserInfo, refetchOauthUserInfo]);
 
   return (
     <AuthContext.Provider
       value={{
         backendUserInfo: backendUserInfo ?? null,
         oauthUserInfo: oauthUserInfo ?? null,
-        apiAccessToken: apiAccessToken ?? null,
+        getApiAccessToken,
         login,
         logout,
         handleOAuthCallback,

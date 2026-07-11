@@ -14,7 +14,7 @@ export default function Auth(): React.ReactElement {
   const [customUrl, setCustomUrl] = useState('');
 
   const { connectTo, backendType, backendUrl } = useServerConfig();
-  const { login, logout, apiAccessToken, oauthUserInfo } = useAuth();
+  const { login, logout, getApiAccessToken, oauthUserInfo } = useAuth();
 
   const menuOpen = Boolean(anchorEl);
 
@@ -40,8 +40,8 @@ export default function Auth(): React.ReactElement {
     closeMenu();
   }
 
-  function handleGetAccessKey(): void {
-    console.log(apiAccessToken);
+  async function handleGetAccessKey(): Promise<void> {
+    console.log(await getApiAccessToken());
     closeMenu();
   }
 
@@ -78,7 +78,7 @@ export default function Auth(): React.ReactElement {
         title={tooltip}
         className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
       >
-        {apiAccessToken ? <UserRoundCheck size={20} /> : <User size={20} />}
+        {oauthUserInfo ? <UserRoundCheck size={20} /> : <User size={20} />}
       </button>
       <Menu
         anchorEl={anchorEl}
@@ -87,7 +87,7 @@ export default function Auth(): React.ReactElement {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem onClick={handleLogin} disabled={Boolean(apiAccessToken)}>
+        <MenuItem onClick={handleLogin} disabled={Boolean(oauthUserInfo)}>
           <KeyRound size={18} className="mr-2" /> Login
         </MenuItem>
         <MenuItem onClick={handleLogout}>
