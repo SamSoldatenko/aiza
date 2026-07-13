@@ -179,6 +179,26 @@ async function performTokenRefresh(
   return response.json();
 }
 
+const inFlightRefreshes = new Map<string, Promise<TokenResponse | null>>();
+
+// Deduplicates concurrent refresh_token exchanges: callers sharing the same
+// token endpoint + client id await a single in-flight request instead of racing.
+async function dedupedTokenRefresh(
+  tokenEndpoint: string,
+  clientId: string,
+  refreshToken: string
+): Promise<TokenResponse | null> {
+  const key = `${tokenEndpoint}:${clientId}`;
+  let promise = inFlightRefreshes.get(key);
+  if (!promise) {
+    promise = performTokenRefresh(tokenEndpoint, clientId, refreshToken).finally(() => {
+      inFlightRefreshes.delete(key);
+    });
+    inFlightRefreshes.set(key, promise);
+  }
+  return promise;
+}
+
 async function exchangeAuthCode(
   tokenEndpoint: string,
   clientId: string,
@@ -241,7 +261,7 @@ async function fetchAccessToken(
   if (token.expires_at > Date.now()) return token.access_token;
 
   const refreshResponse = token.refresh_token
-    ? await performTokenRefresh(tokenEndpoint, clientId, token.refresh_token)
+    ? await dedupedTokenRefresh(tokenEndpoint, clientId, token.refresh_token)
     : null;
 
   const updated = refreshResponse ? updateToken(refreshResponse) : null;
@@ -371,7 +391,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       return;
     }
 
-    performTokenRefresh(token_endpoint, apiService.client_id, token.refresh_token).then(
+    dedupedTokenRefresh(token_endpoint, apiService.client_id, token.refresh_token).then(
       (refreshResponse) => {
         if (refreshResponse) {
           updateToken(refreshResponse);
