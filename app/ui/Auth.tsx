@@ -42,7 +42,11 @@ export default function Auth(): React.ReactElement {
   }
 
   async function handleGetAccessKey(): Promise<void> {
-    console.log(await getApiAccessToken());
+    try {
+      console.log(await getApiAccessToken());
+    } catch (err) {
+      console.error('Failed to get access key:', err);
+    }
     closeMenu();
   }
 

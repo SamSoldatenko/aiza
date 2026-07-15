@@ -166,16 +166,17 @@ async function performTokenRefresh(
     redirect_uri: getRedirectUri(),
   });
 
+  // Network-level failures (offline, ERR_NETWORK_CHANGED, DNS, etc.) are left to
+  // throw so callers can distinguish them from a genuine rejection by Cognito
+  // (e.g. 400 invalid_grant) and avoid treating a transient blip as a dead
+  // refresh token.
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: formData,
-  }).catch((err) => {
-    console.error('Token refresh failed:', err);
-    return null;
   });
 
-  if (!response?.ok) return null;
+  if (!response.ok) return null;
   return response.json();
 }
 
@@ -391,8 +392,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       return;
     }
 
-    dedupedTokenRefresh(token_endpoint, apiService.client_id, token.refresh_token).then(
-      (refreshResponse) => {
+    dedupedTokenRefresh(token_endpoint, apiService.client_id, token.refresh_token)
+      .then((refreshResponse) => {
         if (refreshResponse) {
           updateToken(refreshResponse);
           refetchBackendUserInfo();
@@ -400,8 +401,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         } else {
           logout();
         }
-      }
-    );
+      })
+      .catch((err) => {
+        // Network-level failure: refresh token status is unknown, so don't log
+        // the user out. A later refetch (e.g. on reconnect) will retry.
+        console.error('Token refresh failed:', err);
+      });
   }, [tokenRevoked, token_endpoint, apiService, issuer, logout, refetchBackendUserInfo, refetchOauthUserInfo]);
 
   return (

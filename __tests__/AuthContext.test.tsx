@@ -125,4 +125,110 @@ describe('AuthContext token refresh dedup', () => {
     const storedTokens = JSON.parse(localStorage.getItem('aiza_tokens') || '[]')
     expect(storedTokens[0].access_token).toBe(refreshedAccessToken)
   })
+
+  test('network error during refresh does not delete stored tokens', async () => {
+    const expiredAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 0 })
+
+    localStorage.setItem(
+      'aiza_tokens',
+      JSON.stringify([
+        {
+          access_token: expiredAccessToken,
+          id_token: 'old-id-token',
+          refresh_token: 'refresh-token-value',
+          expires_in: 3600,
+          token_type: 'Bearer',
+          expires_at: Date.now() - 1000,
+        },
+      ])
+    )
+
+    let tokenEndpointCalls = 0
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+
+      if (url === TOKEN_ENDPOINT) {
+        tokenEndpointCalls++
+        throw new TypeError('Failed to fetch')
+      }
+
+      throw new Error(`Unexpected fetch to ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <div />
+        </AuthProvider>
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      expect(tokenEndpointCalls).toBeGreaterThan(0)
+    })
+
+    // Give any pending refresh handling a chance to (wrongly) delete tokens before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const storedTokens = JSON.parse(localStorage.getItem('aiza_tokens') || '[]')
+    expect(storedTokens).toHaveLength(1)
+    expect(storedTokens[0].refresh_token).toBe('refresh-token-value')
+  })
+
+  test('Cognito rejecting the refresh token (400) still deletes stored tokens', async () => {
+    const expiredAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 0 })
+
+    localStorage.setItem(
+      'aiza_tokens',
+      JSON.stringify([
+        {
+          access_token: expiredAccessToken,
+          id_token: 'old-id-token',
+          refresh_token: 'refresh-token-value',
+          expires_in: 3600,
+          token_type: 'Bearer',
+          expires_at: Date.now() - 1000,
+        },
+      ])
+    )
+
+    let tokenEndpointCalls = 0
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+
+      if (url === TOKEN_ENDPOINT) {
+        tokenEndpointCalls++
+        return { ok: false, status: 400, json: async () => ({ error: 'invalid_grant' }) } as Response
+      }
+
+      throw new Error(`Unexpected fetch to ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <div />
+        </AuthProvider>
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      expect(tokenEndpointCalls).toBeGreaterThan(0)
+    })
+
+    await waitFor(() => {
+      const storedTokens = JSON.parse(localStorage.getItem('aiza_tokens') || '[]')
+      expect(storedTokens).toHaveLength(0)
+    })
+  })
 })
