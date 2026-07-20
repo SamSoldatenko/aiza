@@ -3,11 +3,14 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useServerConfig } from './ServerConfigContext';
+import { BackendUserInfo, OAuthUserInfo, TokenRevokedError, fetchCurrentUser, fetchOAuthUserInfo } from './backendClient';
+import { getStoredTokens as getStoredTokensRaw, setStoredTokens as setStoredTokensRaw, getPendingAuth, setPendingAuth, clearPendingAuth } from '@/app/lib/storage';
 
 interface PendingAuth {
   codeVerifier: string;
   tokenEndpoint: string;
   clientId: string;
+  state: string;
 }
 
 interface TokenResponse {
@@ -25,52 +28,26 @@ interface StoredToken extends TokenExchangeResponse {
   expires_at: number;
 }
 
-interface BackendUserInfo {
-  id: string;
-  created: string;
-  modified: string;
-  oauthId: {
-    issuer: string;
-    subject: string;
-  };
-}
-
-interface OAuthUserInfo {
-  sub: string;
-  email?: string;
-  email_verified?: boolean;
-  phone_number?: string;
-  phone_number_verified?: boolean;
-  name?: string;
-  username?: string;
-}
-
 interface AuthContextValue {
   backendUserInfo: BackendUserInfo | null;
   oauthUserInfo: OAuthUserInfo | null;
   getApiAccessToken: () => Promise<string | null>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  handleOAuthCallback: (code: string) => Promise<void>;
+  handleOAuthCallback: (code: string, state: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-class TokenRevokedError extends Error {
-  constructor(message = 'Token has been revoked') {
-    super(message);
-    this.name = 'TokenRevokedError';
-  }
-}
 
 const RANDOM_CHARSET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const BACKEND_USER_STALE_TIME = 60 * 1000; // 1 minute
 const OAUTH_USER_STALE_TIME = 60 * 60 * 1000; // 1 hour
 
 function generateRandomString(length: number): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
   let result = '';
   for (let i = 0; i < length; i++) {
-    result += RANDOM_CHARSET[Math.floor(Math.random() * RANDOM_CHARSET.length)];
+    result += RANDOM_CHARSET[bytes[i] % RANDOM_CHARSET.length];
   }
   return result;
 }
@@ -90,12 +67,11 @@ function parseJwtPayload(token: string): { iss: string; exp: number; client_id: 
 }
 
 function getStoredTokens(): StoredToken[] {
-  if (typeof window === 'undefined') return [];
-  return JSON.parse(localStorage.getItem('aiza_tokens') || '[]');
+  return getStoredTokensRaw<StoredToken>();
 }
 
 function setStoredTokens(tokens: StoredToken[]): void {
-  localStorage.setItem('aiza_tokens', JSON.stringify(tokens));
+  setStoredTokensRaw(tokens);
 }
 
 function tokenMatchesCredentials(token: StoredToken, issuer: string, clientId: string): boolean {
@@ -227,30 +203,6 @@ async function exchangeAuthCode(
   return response.json();
 }
 
-async function fetchBackendUserInfo(
-  backendUrl: string,
-  accessToken: string
-): Promise<BackendUserInfo | null> {
-  const response = await fetch(`${backendUrl}/accounts/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (response.status === 401) throw new TokenRevokedError();
-  if (!response.ok) return null;
-  return response.json();
-}
-
-async function fetchOAuthUserInfo(
-  userinfoEndpoint: string,
-  accessToken: string
-): Promise<OAuthUserInfo | null> {
-  const response = await fetch(userinfoEndpoint, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (response.status === 401) throw new TokenRevokedError();
-  if (!response.ok) return null;
-  return response.json();
-}
-
 async function fetchAccessToken(
   issuer: string,
   clientId: string,
@@ -273,9 +225,9 @@ async function fetchAccessToken(
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }): React.ReactNode {
-  const { backendUrl, aizaJson, openIdConfig } = useServerConfig();
+  const { backendUrl, infoJson, openIdConfig } = useServerConfig();
 
-  const apiService = aizaJson?.api;
+  const apiService = infoJson?.api;
   const { issuer, token_endpoint, authorization_endpoint, end_session_endpoint, userinfo_endpoint } = openIdConfig ?? {};
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -292,13 +244,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
     const codeVerifier = generateRandomString(65);
     const codeChallenge = await sha256AndBase64(codeVerifier);
+    const state = generateRandomString(32);
 
     const pendingAuth: PendingAuth = {
       codeVerifier,
       tokenEndpoint: token_endpoint,
       clientId: apiService.client_id,
+      state,
     };
-    localStorage.setItem('aiza_pending_auth', JSON.stringify(pendingAuth));
+    setPendingAuth(pendingAuth);
 
     const url = new URL(authorization_endpoint);
     url.searchParams.set('client_id', apiService.client_id);
@@ -307,8 +261,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     url.searchParams.set('redirect_uri', getRedirectUri());
     url.searchParams.set('code_challenge', codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
+    url.searchParams.set('state', state);
 
-    location.assign(url.toString());
+    // Navigate the top window, not just the current frame, so the OAuth
+    // flow can't be completed inside an iframe if the app is ever embedded.
+    window.top!.location.assign(url.toString());
   }, [authorization_endpoint, token_endpoint, apiService]);
 
   const logout = useCallback(async () => {
@@ -339,13 +296,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     return token;
   }, [issuer, apiService, token_endpoint]);
 
-  const handleOAuthCallback = useCallback(async (code: string) => {
-    const pendingAuthStr = localStorage.getItem('aiza_pending_auth');
-    if (!pendingAuthStr) {
+  const handleOAuthCallback = useCallback(async (code: string, state: string | null) => {
+    const pendingAuth = getPendingAuth<PendingAuth>();
+    if (!pendingAuth) {
       throw new Error('No pending authentication found');
     }
 
-    const pendingAuth: PendingAuth = JSON.parse(pendingAuthStr);
+    if (!state || state !== pendingAuth.state) {
+      clearPendingAuth();
+      throw new Error('OAuth state mismatch: possible CSRF attempt');
+    }
 
     const response = await exchangeAuthCode(
       pendingAuth.tokenEndpoint,
@@ -355,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     );
 
     storeToken(response);
-    localStorage.removeItem('aiza_pending_auth');
+    clearPendingAuth();
     setIsAuthenticated(true);
   }, []);
 
@@ -363,7 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     queryKey: ['backendUserInfo', backendUrl, isAuthenticated],
     queryFn: async () => {
       const token = await getApiAccessToken();
-      return token ? fetchBackendUserInfo(backendUrl!, token) : null;
+      return token ? fetchCurrentUser(backendUrl!, token) : null;
     },
     enabled: !!backendUrl && isAuthenticated,
     staleTime: BACKEND_USER_STALE_TIME,

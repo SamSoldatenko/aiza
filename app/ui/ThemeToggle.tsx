@@ -2,10 +2,10 @@
 
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { Sun, Moon, Monitor } from 'lucide-react';
-import { useSettings, ThemeMode } from './context/SettingsContext';
+import { useServerConfig, ThemeMode } from './context/ServerConfigContext';
 
 export default function ThemeToggle(): React.ReactElement {
-  const { theme, setTheme } = useSettings();
+  const { theme, setTheme } = useServerConfig();
 
   function handleChange(_: React.MouseEvent<HTMLElement>, newTheme: ThemeMode | null): void {
     if (newTheme) {

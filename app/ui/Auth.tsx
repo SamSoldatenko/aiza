@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Menu, MenuItem, TextField, Button, List, ListItemButton, ListItemText } from '@mui/material';
 import { User, LogOut, KeyRound, Unplug, EarthLock, UserRoundCheck, Key, PlugZap } from 'lucide-react';
-import { DEFAULT_BACKENDS, getKnownBackends } from '@/app/config/backends';
+import { DEFAULT_BACKENDS } from '@/app/config/backends';
+import { getBackendHistory, addBackendToHistory } from '@/app/lib/storage';
 import { useServerConfig } from './context/ServerConfigContext';
 import { useAuth } from './context/AuthContext';
 import ThemeToggle from './ThemeToggle';
@@ -14,7 +15,7 @@ export default function Auth(): React.ReactElement {
   const [customUrl, setCustomUrl] = useState('');
   const [knownBackends, setKnownBackends] = useState<string[]>([]);
 
-  const { connectTo, backendType, backendUrl } = useServerConfig();
+  const { setBackendUrl, backendType, backendUrl } = useServerConfig();
   const { login, logout, getApiAccessToken, oauthUserInfo } = useAuth();
 
   const menuOpen = Boolean(anchorEl);
@@ -51,26 +52,28 @@ export default function Auth(): React.ReactElement {
   }
 
   function handleSwitchBackend(url: string): void {
-    connectTo(url);
+    setBackendUrl(url);
     closeMenu();
   }
 
   function handleOpenCustomDialog(): void {
     setCustomUrl(backendType === 'custom' ? backendUrl ?? '' : '');
-    setKnownBackends(getKnownBackends());
+    setKnownBackends(getBackendHistory());
     setDialogOpen(true);
     closeMenu();
   }
 
   function handleConnectCustom(): void {
-    if (customUrl.trim()) {
-      connectTo(customUrl.trim());
+    const url = customUrl.trim();
+    if (url) {
+      setBackendUrl(url);
+      addBackendToHistory(url);
     }
     closeDialog();
   }
 
   function handleSelectKnownBackend(url: string): void {
-    connectTo(url);
+    setBackendUrl(url);
     closeDialog();
   }
 
