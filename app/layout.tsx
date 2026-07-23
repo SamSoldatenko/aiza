@@ -4,6 +4,7 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import './globals.css';
 import { AizaProvider } from './ui/context/AizaProvider';
 import NavBar from './ui/NavBar';
+import Footer from './ui/Footer';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -24,9 +25,7 @@ export default function RootLayout({
           <AizaProvider>
             <NavBar />
             {children}
-            <footer className="h-16 bg-gray-100 dark:bg-gray-800 p-5 text-center">
-              Aiza app
-            </footer>
+            <Footer />
           </AizaProvider>
         </AppRouterCacheProvider>
       </body>

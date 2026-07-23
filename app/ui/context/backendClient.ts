@@ -12,6 +12,7 @@ export interface InfoJson {
   client_id?: string;
   api?: ServiceConfig;
   analytics?: ServiceConfig;
+  build_timestamp?: string;
 }
 
 export interface OpenIdConfig {
