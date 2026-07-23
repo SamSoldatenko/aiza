@@ -2,51 +2,37 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  getDefaultBackend,
-  getBackendType,
-  BackendType,
-  loadIssuerAllowlist,
-  cacheIssuerBinding,
-  validateIssuer,
-} from '@/app/config/backends';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { getDefaultBackend, getBackendType, BackendType } from '@/app/config/backends';
+import { checkIssuerPin, pinIssuer } from '@/app/config/issuerPinning';
+import { InfoJson, OpenIdConfig, fetchInfoJson, fetchOpenIdConfig } from './backendClient';
+import { getCurrentBackendUrl, setCurrentBackendUrl, getServerSettings, setServerSettings } from '@/app/lib/storage';
 
 export type BackendStatus = 'checking' | 'ok' | 'error';
 export type { BackendType } from '@/app/config/backends';
+export type { InfoJson, OpenIdConfig, ServiceConfig } from './backendClient';
 
-export interface ServiceConfig {
-  url: string;
-  client_id: string;
-  scopes: string[];
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+interface UserSettings {
+  theme: ThemeMode;
 }
 
-export interface AizaJson {
-  name?: string;
-  version?: string;
-  web?: string;
-  'openid-configuration': string;
-  client_id?: string;
-  api?: ServiceConfig;
-  analytics?: ServiceConfig;
-}
-
-export interface OpenIdConfiguration {
-  issuer: string;
-  authorization_endpoint: string;
-  token_endpoint: string;
-  userinfo_endpoint: string;
-  end_session_endpoint: string;
-}
+const defaultSettings: UserSettings = {
+  theme: 'system',
+};
 
 interface ServerConfigContextValue {
-  serverId: string | null;
   backendUrl: string | null;
-  aizaJson: AizaJson | null;
-  openIdConfig: OpenIdConfiguration | null;
+  setBackendUrl: (url: string) => void;
+  infoJson: InfoJson | null;
+  openIdConfig: OpenIdConfig | null;
   error: string | null;
   status: BackendStatus;
   backendType: BackendType;
-  connectTo: (url: string) => void;
+  theme: ThemeMode;
+  setTheme: (theme: ThemeMode) => void;
 }
 
 const ServerConfigContext = createContext<ServerConfigContextValue | undefined>(undefined);
@@ -61,102 +47,135 @@ function getServerId(url: string): string {
 
 const OPENID_STALE_TIME = 10 * 60 * 1000; // 10 minutes
 
-async function fetchAizaJson(backendUrl: string): Promise<AizaJson> {
-  const response = await fetch(backendUrl + '/info.json');
-  if (!response.ok) {
-    throw new Error(`Cannot load ${backendUrl}/info.json`);
-  }
-  return response.json();
-}
-
-async function fetchOpenIdConfig(url: string): Promise<OpenIdConfiguration> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Cannot load ${url}`);
-  }
-  return response.json();
-}
+const lightTheme = createTheme({ palette: { mode: 'light' } });
+const darkTheme = createTheme({ palette: { mode: 'dark' } });
 
 export function ServerConfigProvider({ children }: { children: React.ReactNode }) {
-  const [backendUrl, setBackendUrl] = useState<string | null>(null);
+  const [backendUrl, setBackendUrlState] = useState<string | null>(null);
 
   useEffect(() => {
-    setBackendUrl(localStorage.getItem('aiza_current_backend') || getDefaultBackend());
+    setBackendUrlState(getCurrentBackendUrl() || getDefaultBackend());
   }, []);
 
-  const {
-    data: aizaJson,
-    isPending: aizaPending,
-    error: aizaError,
-    refetch: refetchAiza,
-  } = useQuery({
+  const infoJsonQuery = useQuery({
     queryKey: ['aiza', backendUrl],
-    queryFn: () => fetchAizaJson(backendUrl!),
+    queryFn: () => fetchInfoJson(backendUrl!),
     enabled: !!backendUrl,
     staleTime: 0,
   });
 
-  const openIdUrl = aizaJson?.['openid-configuration'];
-  const {
-    data: openIdConfig,
-    isPending: openIdPending,
-    error: openIdError,
-    refetch: refetchOpenId,
-  } = useQuery({
+  const openIdUrl = infoJsonQuery.data?.['openid-configuration'];
+  const openIdConfigQuery = useQuery({
     queryKey: ['openid', openIdUrl],
     queryFn: () => fetchOpenIdConfig(openIdUrl!),
     enabled: !!openIdUrl,
     staleTime: OPENID_STALE_TIME,
   });
 
-  const [issuerAllowlist, setIssuerAllowlist] = useState<Record<string, string>>({});
+  const { validatedOpenIdConfig, issuerError, isNewIssuerBinding } = useMemo(() => {
+    const openIdConfig = openIdConfigQuery.data;
+    if (!openIdConfig || !backendUrl) {
+      return { validatedOpenIdConfig: null, issuerError: null, isNewIssuerBinding: false };
+    }
+    const issuer = openIdConfig.issuer;
+    const { pinnedBackendUrl: knownBackendUrl, pinnedIssuer: knownIssuer } = checkIssuerPin(backendUrl, issuer);
+
+    if (knownBackendUrl == null && knownIssuer == null) {
+      return { validatedOpenIdConfig: openIdConfig, issuerError: null, isNewIssuerBinding: true };
+    }
+    if (knownIssuer === issuer) {
+      return { validatedOpenIdConfig: openIdConfig, issuerError: null, isNewIssuerBinding: false };
+    }
+    const error = knownIssuer != null
+      ? `Backend returned unexpected issuer (expected ${knownIssuer}, got ${issuer})`
+      : `Untrusted backend claims issuer that belongs to ${knownBackendUrl}`;
+    return { validatedOpenIdConfig: null, issuerError: error, isNewIssuerBinding: false };
+  }, [openIdConfigQuery.data, backendUrl]);
 
   useEffect(() => {
-    setIssuerAllowlist(loadIssuerAllowlist());
-  }, []);
-
-  const { validatedOpenIdConfig, issuerError } = useMemo(() => {
-    if (!openIdConfig || !backendUrl) return { validatedOpenIdConfig: null, issuerError: null };
-    const error = validateIssuer(issuerAllowlist, backendUrl, openIdConfig.issuer);
-    if (error) return { validatedOpenIdConfig: null, issuerError: error };
-    return { validatedOpenIdConfig: openIdConfig, issuerError: null };
-  }, [openIdConfig, backendUrl, issuerAllowlist]);
-
-  useEffect(() => {
-    if (!validatedOpenIdConfig || !backendUrl) return;
-    if (issuerAllowlist[backendUrl]) return; // already known
-    cacheIssuerBinding(backendUrl, validatedOpenIdConfig.issuer);
-    setIssuerAllowlist((prev) => ({ ...prev, [backendUrl]: validatedOpenIdConfig.issuer }));
-  }, [validatedOpenIdConfig, backendUrl, issuerAllowlist]);
+    if (!isNewIssuerBinding || !validatedOpenIdConfig || !backendUrl) return;
+    pinIssuer(backendUrl, validatedOpenIdConfig.issuer);
+  }, [isNewIssuerBinding, validatedOpenIdConfig, backendUrl]);
 
   const serverId = backendUrl ? getServerId(backendUrl) : null;
   const backendType = backendUrl ? getBackendType(backendUrl) : 'prod';
-  const error = aizaError?.message ?? openIdError?.message ?? issuerError ?? null;
-  const status: BackendStatus = error ? 'error' : aizaPending || openIdPending ? 'checking' : 'ok';
+  const error = infoJsonQuery.error?.message ?? openIdConfigQuery.error?.message ?? issuerError ?? null;
+  const status: BackendStatus =
+    error ? 'error' : infoJsonQuery.isPending || openIdConfigQuery.isPending ? 'checking' : 'ok';
 
-  const connectTo = useCallback((url: string) => {
-    localStorage.setItem('aiza_current_backend', url);
+  const { refetch: refetchInfoJson } = infoJsonQuery;
+  const { refetch: refetchOpenIdConfig } = openIdConfigQuery;
+
+  const setBackendUrl = useCallback((url: string) => {
+    setCurrentBackendUrl(url);
     if (url === backendUrl) {
-      refetchAiza();
-      if (openIdUrl) refetchOpenId();
+      refetchInfoJson();
+      if (openIdUrl) refetchOpenIdConfig();
     }
-    setBackendUrl(url);
-  }, [backendUrl, openIdUrl, refetchAiza, refetchOpenId]);
+    setBackendUrlState(url);
+  }, [backendUrl, openIdUrl, refetchInfoJson, refetchOpenIdConfig]);
+
+  // --- Settings (theme), persisted per-server ---
+
+  const [settings, setSettings] = useState<UserSettings>(defaultSettings);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setSystemPrefersDark(mediaQuery.matches);
+
+    const handler = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!serverId) return;
+    setSettings({ ...defaultSettings, ...getServerSettings(serverId, {}) });
+  }, [serverId]);
+
+  const resolvedTheme: 'light' | 'dark' =
+    settings.theme === 'system'
+      ? (systemPrefersDark ? 'dark' : 'light')
+      : settings.theme;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+  }, [resolvedTheme]);
+
+  const setTheme = useCallback((theme: ThemeMode) => {
+    setSettings(prev => {
+      const newSettings = { ...prev, theme };
+      if (serverId) {
+        setServerSettings(serverId, newSettings);
+      }
+      return newSettings;
+    });
+  }, [serverId]);
+
+  const muiTheme = resolvedTheme === 'dark' ? darkTheme : lightTheme;
+  const infoJson = infoJsonQuery.data ?? null;
+
+  const contextValue = useMemo(() => ({
+    backendUrl,
+    setBackendUrl,
+    infoJson,
+    openIdConfig: validatedOpenIdConfig,
+    error,
+    status,
+    backendType,
+    theme: settings.theme,
+    setTheme,
+  }), [backendUrl, setBackendUrl, infoJson, validatedOpenIdConfig, error, status, backendType, settings.theme, setTheme]);
 
   return (
-    <ServerConfigContext.Provider
-      value={{
-        serverId,
-        backendUrl,
-        aizaJson: aizaJson ?? null,
-        openIdConfig: validatedOpenIdConfig,
-        error,
-        status,
-        backendType,
-        connectTo,
-      }}
-    >
-      {children}
+    <ServerConfigContext.Provider value={contextValue}>
+      <ThemeProvider theme={muiTheme}>
+        <CssBaseline />
+        {children}
+      </ThemeProvider>
     </ServerConfigContext.Provider>
   );
 }

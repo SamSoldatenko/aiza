@@ -12,26 +12,13 @@ function CognitoRedirect() {
 
   useEffect(() => {
     const code = params.get('code');
-    const error = params.get('error');
     const state = params.get('state');
-
-    const isInIframe = window !== window.parent;
-
-    if (isInIframe) {
-      window.parent.postMessage({
-        type: 'oauth_callback',
-        code,
-        error,
-        state,
-      }, window.location.origin);
-      return;
-    }
 
     if (!code || exchangeAttempted.current) return;
 
     exchangeAttempted.current = true;
 
-    handleOAuthCallback(code)
+    handleOAuthCallback(code, state)
       .then(() => {
         router.replace('/');
       })

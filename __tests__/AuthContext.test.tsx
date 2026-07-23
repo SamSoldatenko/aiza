@@ -1,7 +1,8 @@
 import { expect, test, describe, afterEach, beforeEach, vi } from 'vitest'
-import { render, waitFor, cleanup } from '@testing-library/react'
+import { render, renderHook, act, waitFor, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider } from '@/app/ui/context/AuthContext'
+import { AuthProvider, useAuth } from '@/app/ui/context/AuthContext'
+import { getStoredTokens, setStoredTokens, setPendingAuth, getPendingAuth } from '@/app/lib/storage'
 
 const ISSUER = 'https://cognito-idp.example.com/test-pool'
 const CLIENT_ID = 'test-client-id'
@@ -11,9 +12,8 @@ const BACKEND_URL = 'https://backend.example.com'
 
 vi.mock('@/app/ui/context/ServerConfigContext', () => ({
   useServerConfig: () => ({
-    serverId: 'backend.example.com',
     backendUrl: BACKEND_URL,
-    aizaJson: { api: { client_id: CLIENT_ID, url: BACKEND_URL, scopes: ['openid', 'email'] } },
+    infoJson: { api: { client_id: CLIENT_ID, url: BACKEND_URL, scopes: ['openid', 'email'] } },
     openIdConfig: {
       issuer: ISSUER,
       authorization_endpoint: 'https://auth.example.com/oauth2/authorize',
@@ -24,7 +24,9 @@ vi.mock('@/app/ui/context/ServerConfigContext', () => ({
     error: null,
     status: 'ok',
     backendType: 'prod',
-    connectTo: vi.fn(),
+    setBackendUrl: vi.fn(),
+    theme: 'system',
+    setTheme: vi.fn(),
   }),
 }))
 
@@ -50,19 +52,16 @@ describe('AuthContext token refresh dedup', () => {
     const expiredAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 0 })
     const refreshedAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 9999999999 })
 
-    localStorage.setItem(
-      'aiza_tokens',
-      JSON.stringify([
-        {
-          access_token: expiredAccessToken,
-          id_token: 'old-id-token',
-          refresh_token: 'refresh-token-value',
-          expires_in: 3600,
-          token_type: 'Bearer',
-          expires_at: Date.now() - 1000,
-        },
-      ])
-    )
+    setStoredTokens([
+      {
+        access_token: expiredAccessToken,
+        id_token: 'old-id-token',
+        refresh_token: 'refresh-token-value',
+        expires_in: 3600,
+        token_type: 'Bearer',
+        expires_at: Date.now() - 1000,
+      },
+    ])
 
     const tokenEndpointCalls: unknown[] = []
 
@@ -122,26 +121,23 @@ describe('AuthContext token refresh dedup', () => {
 
     expect(tokenEndpointCalls).toHaveLength(1)
 
-    const storedTokens = JSON.parse(localStorage.getItem('aiza_tokens') || '[]')
+    const storedTokens = getStoredTokens<{ access_token: string }>()
     expect(storedTokens[0].access_token).toBe(refreshedAccessToken)
   })
 
   test('network error during refresh does not delete stored tokens', async () => {
     const expiredAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 0 })
 
-    localStorage.setItem(
-      'aiza_tokens',
-      JSON.stringify([
-        {
-          access_token: expiredAccessToken,
-          id_token: 'old-id-token',
-          refresh_token: 'refresh-token-value',
-          expires_in: 3600,
-          token_type: 'Bearer',
-          expires_at: Date.now() - 1000,
-        },
-      ])
-    )
+    setStoredTokens([
+      {
+        access_token: expiredAccessToken,
+        id_token: 'old-id-token',
+        refresh_token: 'refresh-token-value',
+        expires_in: 3600,
+        token_type: 'Bearer',
+        expires_at: Date.now() - 1000,
+      },
+    ])
 
     let tokenEndpointCalls = 0
 
@@ -175,7 +171,7 @@ describe('AuthContext token refresh dedup', () => {
     // Give any pending refresh handling a chance to (wrongly) delete tokens before asserting.
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    const storedTokens = JSON.parse(localStorage.getItem('aiza_tokens') || '[]')
+    const storedTokens = getStoredTokens<{ refresh_token: string }>()
     expect(storedTokens).toHaveLength(1)
     expect(storedTokens[0].refresh_token).toBe('refresh-token-value')
   })
@@ -183,19 +179,16 @@ describe('AuthContext token refresh dedup', () => {
   test('Cognito rejecting the refresh token (400) still deletes stored tokens', async () => {
     const expiredAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 0 })
 
-    localStorage.setItem(
-      'aiza_tokens',
-      JSON.stringify([
-        {
-          access_token: expiredAccessToken,
-          id_token: 'old-id-token',
-          refresh_token: 'refresh-token-value',
-          expires_in: 3600,
-          token_type: 'Bearer',
-          expires_at: Date.now() - 1000,
-        },
-      ])
-    )
+    setStoredTokens([
+      {
+        access_token: expiredAccessToken,
+        id_token: 'old-id-token',
+        refresh_token: 'refresh-token-value',
+        expires_in: 3600,
+        token_type: 'Bearer',
+        expires_at: Date.now() - 1000,
+      },
+    ])
 
     let tokenEndpointCalls = 0
 
@@ -227,8 +220,131 @@ describe('AuthContext token refresh dedup', () => {
     })
 
     await waitFor(() => {
-      const storedTokens = JSON.parse(localStorage.getItem('aiza_tokens') || '[]')
-      expect(storedTokens).toHaveLength(0)
+      expect(getStoredTokens()).toHaveLength(0)
     })
+  })
+})
+
+function wrapper({ children }: { children: React.ReactNode }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>{children}</AuthProvider>
+    </QueryClientProvider>
+  )
+}
+
+describe('AuthContext OAuth state (CSRF) validation', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  test('login() generates a state, persists it, and includes it in the authorization URL', async () => {
+    const assignMock = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign: assignMock })
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      await result.current.login()
+    })
+
+    const calledUrl = new URL(assignMock.mock.calls[0][0] as string)
+    const urlState = calledUrl.searchParams.get('state')
+    expect(urlState).toBeTruthy()
+
+    const pendingAuth = getPendingAuth<{ state: string }>()
+    expect(pendingAuth?.state).toBe(urlState)
+  })
+
+  test('handleOAuthCallback rejects when state does not match pendingAuth', async () => {
+    setPendingAuth({
+      codeVerifier: 'verifier',
+      tokenEndpoint: TOKEN_ENDPOINT,
+      clientId: CLIENT_ID,
+      state: 'expected-state',
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await expect(
+      act(async () => {
+        await result.current.handleOAuthCallback('auth-code', 'wrong-state')
+      })
+    ).rejects.toThrow(/state mismatch/i)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getPendingAuth()).toBeNull()
+  })
+
+  test('handleOAuthCallback rejects when state param is missing', async () => {
+    setPendingAuth({
+      codeVerifier: 'verifier',
+      tokenEndpoint: TOKEN_ENDPOINT,
+      clientId: CLIENT_ID,
+      state: 'expected-state',
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await expect(
+      act(async () => {
+        await result.current.handleOAuthCallback('auth-code', null)
+      })
+    ).rejects.toThrow(/state mismatch/i)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getPendingAuth()).toBeNull()
+  })
+
+  test('handleOAuthCallback proceeds to token exchange when state matches', async () => {
+    setPendingAuth({
+      codeVerifier: 'verifier',
+      tokenEndpoint: TOKEN_ENDPOINT,
+      clientId: CLIENT_ID,
+      state: 'expected-state',
+    })
+    const accessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 9999999999 })
+    let tokenEndpointCalls = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+
+      if (url === TOKEN_ENDPOINT) {
+        tokenEndpointCalls++
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: accessToken,
+            id_token: 'id-token',
+            refresh_token: 'refresh-token',
+            expires_in: 3600,
+            token_type: 'Bearer',
+          }),
+        } as Response
+      }
+
+      // backendUserInfo/oauthUserInfo queries fire once isAuthenticated flips true;
+      // not the concern of this test, so just decline gracefully.
+      return { ok: false, status: 404, json: async () => ({}) } as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    await act(async () => {
+      await result.current.handleOAuthCallback('auth-code', 'expected-state')
+    })
+
+    expect(tokenEndpointCalls).toBe(1)
+    expect(getPendingAuth()).toBeNull()
   })
 })
