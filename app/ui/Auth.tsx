@@ -128,6 +128,7 @@ export default function Auth(): React.ReactElement {
         <DialogTitle>Connect to Custom Backend</DialogTitle>
         <DialogContent>
           <TextField
+            // oxlint-disable-next-line jsx-a11y/no-autofocus -- deliberate: focus the dialog's only input on open
             autoFocus
             margin="dense"
             label="Backend URL"
