@@ -1,6 +1,4 @@
-'use client';
-
-import Link from 'next/link';
+import { Link } from '@tanstack/react-router';
 import { ReactNode } from 'react';
 
 interface NavLinkProps {
@@ -28,7 +26,7 @@ export default function NavLink({ label, href, icon, isActive, external }: NavLi
   }
 
   return (
-    <Link href={href} className={className}>
+    <Link to={href} className={className}>
       {icon}
       <span>{label}</span>
     </Link>

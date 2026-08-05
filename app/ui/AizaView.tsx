@@ -1,5 +1,3 @@
-'use client';
-
 import { GitBranch } from 'lucide-react';
 
 interface AizaViewProps {

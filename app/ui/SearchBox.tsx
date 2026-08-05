@@ -1,5 +1,3 @@
-'use client';
-
 import { TextField, InputAdornment } from '@mui/material';
 import { Search } from 'lucide-react';
 

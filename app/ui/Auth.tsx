@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Menu, MenuItem, TextField, Button, List, ListItemButton, ListItemText } from '@mui/material';
 import { User, LogOut, KeyRound, Unplug, EarthLock, UserRoundCheck, Key, PlugZap } from 'lucide-react';
@@ -130,6 +128,7 @@ export default function Auth(): React.ReactElement {
         <DialogTitle>Connect to Custom Backend</DialogTitle>
         <DialogContent>
           <TextField
+            // oxlint-disable-next-line jsx-a11y/no-autofocus -- deliberate: focus the dialog's only input on open
             autoFocus
             margin="dense"
             label="Backend URL"

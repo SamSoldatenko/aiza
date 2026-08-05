@@ -62,9 +62,11 @@ When you want to buy something (e.g., a used car), Aiza works for you continuous
 ## Development
 
 ```bash
-npm install      # Install dependencies
-npm run dev      # Start development server (http://localhost:3000)
-npm run build    # Build for production
-npm run lint     # Run ESLint
-npm run test     # Run tests
+pnpm install       # Install dependencies
+pnpm dev           # Start development server (http://localhost:5173)
+pnpm run build     # Build for production
+pnpm run typecheck # Type-check with tsc
+pnpm run lint      # Run oxlint
+pnpm run check     # Typecheck + lint
+pnpm test          # Run tests
 ```

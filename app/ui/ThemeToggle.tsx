@@ -1,5 +1,3 @@
-'use client';
-
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { Sun, Moon, Monitor } from 'lucide-react';
 import { useServerConfig, ThemeMode } from './context/ServerConfigContext';

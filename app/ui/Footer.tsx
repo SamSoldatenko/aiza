@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useState } from 'react';
 import { useServerConfig } from './context/ServerConfigContext';
 
@@ -18,7 +16,7 @@ export default function Footer(): React.ReactElement {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const appBuildTime = mounted ? formatTimestamp(process.env.NEXT_PUBLIC_BUILD_TIMESTAMP) : null;
+  const appBuildTime = mounted ? formatTimestamp(import.meta.env.VITE_BUILD_TIMESTAMP) : null;
   const backendBuildTime = mounted ? formatTimestamp(infoJson?.build_timestamp) : null;
 
   return (

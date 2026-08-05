@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { Alert, Button } from '@mui/material';
 import { useServerConfig } from './context/ServerConfigContext';
