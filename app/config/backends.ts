@@ -8,7 +8,7 @@ export function getDefaultBackend(): string {
     return DEFAULT_BACKENDS.prod;
   }
   const host = window.location.host;
-  if (host === 'localhost:3000') {
+  if (host === 'localhost:5173') {
     return DEFAULT_BACKENDS.dev;
   }
   return DEFAULT_BACKENDS.prod;

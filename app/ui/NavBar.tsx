@@ -1,8 +1,5 @@
-'use client';
-
 import { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
 import { Home, User, Bug, Info, Menu, X } from 'lucide-react';
 import Auth from './Auth';
@@ -29,7 +26,7 @@ function isNavItemActive(item: NavItem, pathname: string): boolean {
 }
 
 export default function NavBar(): React.ReactElement {
-  const pathname = usePathname();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   function handleDrawerToggle(): void {
@@ -53,7 +50,7 @@ export default function NavBar(): React.ReactElement {
             >
               {drawerOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white">
+            <Link to="/" className="text-xl font-bold text-gray-900 dark:text-white">
               AIZA
             </Link>
             <div className="hidden md:flex items-center space-x-1 ml-4">
@@ -97,7 +94,7 @@ export default function NavBar(): React.ReactElement {
             const isActive = isNavItemActive(item, pathname);
             const linkProps = item.external
               ? { component: 'a' as const, href: item.href }
-              : { component: Link, href: item.href };
+              : { component: Link, to: item.href };
 
             return (
               <ListItem key={item.href} disablePadding>

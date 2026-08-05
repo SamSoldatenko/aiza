@@ -1,5 +1,3 @@
-'use client';
-
 import { Tooltip } from '@mui/material';
 import { Server, CheckCircle, XCircle, Loader } from 'lucide-react';
 import { useServerConfig, BackendStatus, BackendType } from './context/ServerConfigContext';

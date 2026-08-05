@@ -1,5 +1,3 @@
-'use client';
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ServerConfigProvider } from './ServerConfigContext';
 import { AuthProvider } from './AuthContext';

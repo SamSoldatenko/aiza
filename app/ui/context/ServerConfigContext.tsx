@@ -1,5 +1,3 @@
-'use client';
-
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
