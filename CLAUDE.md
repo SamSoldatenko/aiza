@@ -4,22 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Aiza is a personal AI assistant web application built with Next.js 16 (App Router), React 19, TypeScript, and AWS Cognito authentication.
+Aiza is a personal AI assistant web application built with Vite, React 19, TypeScript, TanStack Router, and AWS Cognito authentication. It's a client-only SPA (no SSR), deployed as a static site to GitHub Pages.
 
 ## Commands
 
 ```bash
-npm run dev      # Start development server (http://localhost:3000)
-npm run build    # Build for production
-npm run lint     # Run ESLint
-npm run test     # Run all tests with Vitest
-npm test -- __tests__/Auth.test.tsx  # Run a single test file
+pnpm dev                                # Start development server (http://localhost:5173)
+pnpm run build                          # Type-check and build for production
+pnpm run typecheck                      # Type-check with tsc
+pnpm run lint                           # Run oxlint
+pnpm run check                          # Typecheck + lint
+pnpm test                               # Run all tests with Vitest
+pnpm test -- run __tests__/Auth.test.tsx  # Run a single test file
 ```
 
 ## Architecture
 
 ### App Structure
-- **app/layout.tsx** - Root layout wraps entire app with `AizaProvider` and renders `NavBar`
+- **app/main.tsx** - Entry point; mounts `RouterProvider` into `#root` (see `index.html`)
+- **app/router.tsx** - Code-based TanStack Router route tree (`/`, `/about`, `/profile`, `/cognito_redirect`)
+- **app/ui/RootLayout.tsx** - Root route component; wraps the app with `AizaProvider`, renders `NavBar`, the route `<Outlet />`, and `Footer`
 - **app/lib/storage.ts** - Single source of truth for every localStorage key; typed named accessors, no other file touches `localStorage` directly
 - **app/ui/context/** - Modular context providers:
   - **AizaProvider.tsx** - Composes providers (ServerConfig → Auth)
@@ -30,12 +34,12 @@ npm test -- __tests__/Auth.test.tsx  # Run a single test file
 - **app/ui/Auth.tsx** - User menu component with login/logout, theme toggle, and backend switcher (prod/dev/custom, with history of previously-used custom backends)
 - **app/ui/BackendMismatchBanner.tsx** - Warning banner when accessing from URL that doesn't match backend's expected `web` URL
 - **app/ui/ThemeToggle.tsx** - Theme mode switcher component (reads/writes theme via `useServerConfig()`)
-- **app/cognito_redirect/page.tsx** - Handles OAuth callback, exchanges auth code for tokens
+- **app/routes/CognitoRedirect.tsx** - Handles OAuth callback, exchanges auth code for tokens; reached via a real full-page redirect from Cognito, not client-side navigation (relevant to the GitHub Pages SPA-fallback setup in `.github/workflows/main.yml`)
 
-### Pages
-- **app/page.tsx** - Home page
-- **app/profile/page.tsx** - User profile page
-- **app/about/page.tsx** - About page
+### Routes
+- **app/routes/Home.tsx** - Home page
+- **app/routes/Profile.tsx** - User profile page
+- **app/routes/About.tsx** - About page
 
 ### Authentication Flow
 1. `login()` initiates PKCE flow, stores pending auth state, redirects to Cognito
@@ -49,7 +53,7 @@ npm test -- __tests__/Auth.test.tsx  # Run a single test file
 - User settings (theme) stored in localStorage as `aiza_settings:{serverId}`
 - Current backend stored as `aiza_current_backend`; custom backend history stored as `aiza_backend_history`
 - `setBackendUrl(url)` (in `ServerConfigContext`) fetches `/info.json` from the backend, then its OpenID config, then validates the returned issuer against the allowlist
-- Default backend auto-selected: dev (`localhost:8080`) when running on `localhost:3000`, otherwise prod
+- Default backend auto-selected: dev (`localhost:8080`) when running on `localhost:5173` (Vite's default dev port), otherwise prod
 
 ### Styling
 Uses a hybrid MUI + Tailwind approach:
