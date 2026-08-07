@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useServerConfig } from './ServerConfigContext';
 import { BackendUserInfo, OAuthUserInfo, TokenRevokedError, fetchCurrentUser, fetchOAuthUserInfo } from './backendClient';
@@ -367,20 +367,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       });
   }, [tokenRevoked, token_endpoint, apiService, issuer, logout, refetchBackendUserInfo, refetchOauthUserInfo]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        backendUserInfo: backendUserInfo ?? null,
-        oauthUserInfo: oauthUserInfo ?? null,
-        getApiAccessToken,
-        login,
-        logout,
-        handleOAuthCallback,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      backendUserInfo: backendUserInfo ?? null,
+      oauthUserInfo: oauthUserInfo ?? null,
+      getApiAccessToken,
+      login,
+      logout,
+      handleOAuthCallback,
+    }),
+    [backendUserInfo, oauthUserInfo, getApiAccessToken, login, logout, handleOAuthCallback]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {
