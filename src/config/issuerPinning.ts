@@ -1,4 +1,4 @@
-import { getCachedIssuers, setCachedIssuers } from '@/app/lib/storage';
+import { getCachedIssuers, setCachedIssuers } from '@/lib/storage';
 import { DEFAULT_BACKENDS } from './backends';
 
 // Hardcoded backend URL → expected JWT issuer mapping.

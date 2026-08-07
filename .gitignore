@@ -26,3 +26,8 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# scratch dir written by @tanstack/router-plugin
+# (src/routeTree.gen.ts is generated too, but is committed so that
+#  `tsc -b` works on a clean checkout, before Vite has ever run)
+/.tanstack

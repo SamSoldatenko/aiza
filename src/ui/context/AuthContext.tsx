@@ -2,7 +2,7 @@ import { createContext, useContext, useCallback, useEffect, useMemo, useState } 
 import { useQuery } from '@tanstack/react-query';
 import { useServerConfig } from './ServerConfigContext';
 import { BackendUserInfo, OAuthUserInfo, TokenRevokedError, fetchCurrentUser, fetchOAuthUserInfo } from './backendClient';
-import { getStoredTokens as getStoredTokensRaw, setStoredTokens as setStoredTokensRaw, getPendingAuth, setPendingAuth, clearPendingAuth } from '@/app/lib/storage';
+import { getStoredTokens as getStoredTokensRaw, setStoredTokens as setStoredTokensRaw, getPendingAuth, setPendingAuth, clearPendingAuth } from '@/lib/storage';
 
 interface PendingAuth {
   codeVerifier: string;
@@ -77,6 +77,10 @@ function tokenMatchesCredentials(token: StoredToken, issuer: string, clientId: s
   return payload.iss === issuer && payload.client_id === clientId;
 }
 
+function findTokenIndex(tokens: StoredToken[], issuer: string, clientId: string): number {
+  return tokens.findIndex((t) => tokenMatchesCredentials(t, issuer, clientId));
+}
+
 function loadToken(issuer: string, clientId: string): StoredToken | null {
   return getStoredTokens().find((t) => tokenMatchesCredentials(t, issuer, clientId)) ?? null;
 }
@@ -89,7 +93,7 @@ function storeToken(response: TokenExchangeResponse): StoredToken {
 
   const { iss, client_id } = parseJwtPayload(response.access_token);
   const tokens = getStoredTokens();
-  const index = tokens.findIndex((t) => tokenMatchesCredentials(t, iss, client_id));
+  const index = findTokenIndex(tokens, iss, client_id);
 
   if (index >= 0) {
     tokens[index] = storedToken;
@@ -109,7 +113,7 @@ function deleteToken(issuer: string, clientId: string): void {
 function updateToken(response: TokenResponse): StoredToken | null {
   const { iss, client_id } = parseJwtPayload(response.access_token);
   const tokens = getStoredTokens();
-  const index = tokens.findIndex((t) => tokenMatchesCredentials(t, iss, client_id));
+  const index = findTokenIndex(tokens, iss, client_id);
 
   if (index < 0) return null;
 

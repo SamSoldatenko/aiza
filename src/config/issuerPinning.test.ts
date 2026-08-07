@@ -1,7 +1,7 @@
 import { expect, test, describe, beforeEach } from 'vitest'
-import { DEFAULT_BACKENDS } from '@/app/config/backends'
-import { getPinnedIssuers, pinIssuer, checkIssuerPin } from '@/app/config/issuerPinning'
-import { getCachedIssuers } from '@/app/lib/storage'
+import { DEFAULT_BACKENDS } from './backends'
+import { getPinnedIssuers, pinIssuer, checkIssuerPin } from './issuerPinning'
+import { getCachedIssuers } from '@/lib/storage'
 
 const PROD_ISSUER = 'https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_SSH5Zn4xD'
 const CUSTOM_URL = 'http://localhost:9999'

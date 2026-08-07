@@ -15,31 +15,28 @@ pnpm run typecheck                      # Type-check with tsc
 pnpm run lint                           # Run oxlint
 pnpm run check                          # Typecheck + lint
 pnpm test                               # Run all tests with Vitest
-pnpm test -- run __tests__/Auth.test.tsx  # Run a single test file
+pnpm test -- run src/ui/Auth.test.tsx     # Run a single test file (tests are co-located with source)
 ```
 
 ## Architecture
 
 ### App Structure
-- **app/main.tsx** - Entry point; mounts `RouterProvider` into `#root` (see `index.html`)
-- **app/router.tsx** - Code-based TanStack Router route tree (`/`, `/about`, `/profile`, `/cognito_redirect`)
-- **app/ui/RootLayout.tsx** - Root route component; wraps the app with `AizaProvider`, renders `NavBar`, the route `<Outlet />`, and `Footer`
-- **app/lib/storage.ts** - Single source of truth for every localStorage key; typed named accessors, no other file touches `localStorage` directly
-- **app/ui/context/** - Modular context providers:
+- **src/main.tsx** - Entry point; mounts `RouterProvider` into `#root` (see `index.html`)
+- **src/router.tsx** - Thin `createRouter()` wired to `src/routeTree.gen.ts`, which `@tanstack/router-plugin` regenerates from `src/routes/` on every Vite run. Never edit it by hand, but do commit it: `pnpm run typecheck` and `pnpm run build` both start with `tsc -b`, which needs the file to already exist on a clean checkout.
+- **src/routes/** - File-based route definitions (one file per route, each rendering a page component from `src/pages/`); includes `__root.tsx` for the root layout and not-found/error components
+- **src/pages/** - Page components, independent of routing
+- **src/ui/RootLayout.tsx** - Root route component; wraps the app with `AizaProvider`, renders `NavBar`, the route `<Outlet />`, `Footer`, and (dev-only) the TanStack devtools panels
+- **src/lib/storage.ts** - Single source of truth for every localStorage key; typed named accessors, no other file touches `localStorage` directly
+- **src/ui/context/** - Modular context providers:
   - **AizaProvider.tsx** - Composes providers (ServerConfig → Auth)
   - **ServerConfigContext.tsx** - Backend configuration (fetches `/info.json` and OpenID config, detects URL mismatch, validates the JWT issuer against an allowlist) plus user settings (theme: light/dark/system, persisted per-server), and provides the MUI `ThemeProvider`
   - **backendClient.ts** - Backend/OpenID fetch functions and shared types (`InfoJson`, `OpenIdConfig`, `BackendUserInfo`, `OAuthUserInfo`, `TokenRevokedError`)
   - **AuthContext.tsx** - OAuth2/PKCE authentication and token management via `getApiAccessToken()`; dedupes concurrent refresh_token exchanges and distinguishes a network failure from a rejected refresh token so a token isn't dropped on a transient blip
-- **app/ui/NavBar.tsx** - Responsive navigation header with mobile drawer, contains Auth component and BackendMismatchBanner
-- **app/ui/Auth.tsx** - User menu component with login/logout, theme toggle, and backend switcher (prod/dev/custom, with history of previously-used custom backends)
-- **app/ui/BackendMismatchBanner.tsx** - Warning banner when accessing from URL that doesn't match backend's expected `web` URL
-- **app/ui/ThemeToggle.tsx** - Theme mode switcher component (reads/writes theme via `useServerConfig()`)
-- **app/routes/CognitoRedirect.tsx** - Handles OAuth callback, exchanges auth code for tokens; reached via a real full-page redirect from Cognito, not client-side navigation (relevant to the GitHub Pages SPA-fallback setup in `.github/workflows/main.yml`)
-
-### Routes
-- **app/routes/Home.tsx** - Home page
-- **app/routes/Profile.tsx** - User profile page
-- **app/routes/About.tsx** - About page
+- **src/ui/NavBar.tsx** - Responsive navigation header with mobile drawer, contains Auth component and BackendMismatchBanner
+- **src/ui/Auth.tsx** - User menu component with login/logout, theme toggle, and backend switcher (prod/dev/custom, with history of previously-used custom backends)
+- **src/ui/BackendMismatchBanner.tsx** - Warning banner when accessing from URL that doesn't match backend's expected `web` URL
+- **src/ui/ThemeToggle.tsx** - Theme mode switcher component (reads/writes theme via `useServerConfig()`)
+- **src/pages/CognitoRedirect.tsx** - Handles OAuth callback, exchanges auth code for tokens; reached via a real full-page redirect from Cognito, not client-side navigation (relevant to the GitHub Pages SPA-fallback setup in `.github/workflows/main.yml`)
 
 ### Authentication Flow
 1. `login()` initiates PKCE flow, stores pending auth state, redirects to Cognito
@@ -48,8 +45,8 @@ pnpm test -- run __tests__/Auth.test.tsx  # Run a single test file
 4. `getApiAccessToken()` returns a valid token for the `api` service, auto-refreshing it if expired; concurrent refreshes for the same token endpoint + client id are deduped into a single in-flight request
 
 ### Backend Configuration
-- **app/config/backends.ts** - Default backend URLs, auto-detection logic, and backend type (dev/prod/custom)
-- **app/config/issuerPinning.ts** - JWT issuer pinning (hardcoded per default backend, cached per custom backend in localStorage) used to reject a backend that returns an unexpected or spoofed issuer
+- **src/config/backends.ts** - Default backend URLs, auto-detection logic, and backend type (dev/prod/custom)
+- **src/config/issuerPinning.ts** - JWT issuer pinning (hardcoded per default backend, cached per custom backend in localStorage) used to reject a backend that returns an unexpected or spoofed issuer
 - User settings (theme) stored in localStorage as `aiza_settings:{serverId}`
 - Current backend stored as `aiza_current_backend`; custom backend history stored as `aiza_backend_history`
 - `setBackendUrl(url)` (in `ServerConfigContext`) fetches `/info.json` from the backend, then its OpenID config, then validates the returned issuer against the allowlist

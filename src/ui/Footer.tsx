@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { useServerConfig } from './context/ServerConfigContext';
 
 function formatTimestamp(value: string | undefined): string | null {
@@ -10,14 +9,8 @@ function formatTimestamp(value: string | undefined): string | null {
 export default function Footer(): React.ReactElement {
   const { infoJson } = useServerConfig();
 
-  // Deferred until after mount: toLocaleString() output can differ between
-  // the server's SSR pass and the browser (locale/timezone/ICU), which would
-  // otherwise cause a hydration mismatch on the very first render.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const appBuildTime = mounted ? formatTimestamp(import.meta.env.VITE_BUILD_TIMESTAMP) : null;
-  const backendBuildTime = mounted ? formatTimestamp(infoJson?.build_timestamp) : null;
+  const appBuildTime = formatTimestamp(import.meta.env.VITE_BUILD_TIMESTAMP);
+  const backendBuildTime = formatTimestamp(infoJson?.build_timestamp);
 
   return (
     <footer className="min-h-16 bg-gray-100 dark:bg-gray-800 p-5 text-center text-sm">

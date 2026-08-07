@@ -14,9 +14,9 @@
     "jsx": "react-jsx",
     "target": "ES2017",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx", "__tests__/**/*.ts", "__tests__/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules"]
 }
