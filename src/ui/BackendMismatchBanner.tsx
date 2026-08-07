@@ -1,17 +1,12 @@
-import { useState, useEffect } from 'react';
 import { Alert, Button } from '@mui/material';
 import { useServerConfig } from './context/ServerConfigContext';
 
 export default function BackendMismatchBanner(): React.ReactElement | null {
   const { infoJson } = useServerConfig();
-  const [currentOrigin, setCurrentOrigin] = useState('');
-
-  useEffect(() => {
-    setCurrentOrigin(window.location.origin);
-  }, []);
+  const currentOrigin = window.location.origin;
 
   const expectedUrl = infoJson?.web;
-  const urlMismatch = expectedUrl && currentOrigin && currentOrigin !== expectedUrl;
+  const urlMismatch = expectedUrl && currentOrigin !== expectedUrl;
 
   if (!urlMismatch) {
     return null;

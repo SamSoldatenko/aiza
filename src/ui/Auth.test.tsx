@@ -1,7 +1,7 @@
 import { expect, test, describe, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import Auth from '../app/ui/Auth'
-import { AizaProvider } from '@/app/ui/context/AizaProvider'
+import Auth from './Auth'
+import { AizaProvider } from '@/ui/context/AizaProvider'
 
 describe('Auth component', () => {
   afterEach(() => {

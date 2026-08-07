@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Menu, MenuItem, TextField, Button, List, ListItemButton, ListItemText } from '@mui/material';
 import { User, LogOut, KeyRound, Unplug, EarthLock, UserRoundCheck, Key, PlugZap } from 'lucide-react';
-import { DEFAULT_BACKENDS } from '@/app/config/backends';
-import { getBackendHistory, addBackendToHistory } from '@/app/lib/storage';
+import { DEFAULT_BACKENDS } from '@/config/backends';
+import { getBackendHistory, addBackendToHistory } from '@/lib/storage';
 import { useServerConfig } from './context/ServerConfigContext';
 import { useAuth } from './context/AuthContext';
 import ThemeToggle from './ThemeToggle';

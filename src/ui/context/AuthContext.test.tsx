@@ -1,8 +1,8 @@
 import { expect, test, describe, afterEach, beforeEach, vi } from 'vitest'
 import { render, renderHook, act, waitFor, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { AuthProvider, useAuth } from '@/app/ui/context/AuthContext'
-import { getStoredTokens, setStoredTokens, setPendingAuth, getPendingAuth } from '@/app/lib/storage'
+import { AuthProvider, useAuth } from './AuthContext'
+import { getStoredTokens, setStoredTokens, setPendingAuth, getPendingAuth } from '@/lib/storage'
 
 const ISSUER = 'https://cognito-idp.example.com/test-pool'
 const CLIENT_ID = 'test-client-id'
@@ -10,7 +10,7 @@ const TOKEN_ENDPOINT = 'https://auth.example.com/oauth2/token'
 const USERINFO_ENDPOINT = 'https://auth.example.com/oauth2/userInfo'
 const BACKEND_URL = 'https://backend.example.com'
 
-vi.mock('@/app/ui/context/ServerConfigContext', () => ({
+vi.mock('./ServerConfigContext', () => ({
   useServerConfig: () => ({
     backendUrl: BACKEND_URL,
     infoJson: { api: { client_id: CLIENT_ID, url: BACKEND_URL, scopes: ['openid', 'email'] } },

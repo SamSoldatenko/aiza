@@ -1,7 +1,7 @@
 import { Info } from 'lucide-react';
 import InfoCard from '../ui/InfoCard';
 
-export default function AboutPage(): React.ReactElement {
+export default function About(): React.ReactElement {
   return (
     <InfoCard icon={<Info size={48} className="text-gray-400" />} title="About AIZA">
       <p className="text-gray-600 dark:text-gray-400">

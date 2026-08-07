@@ -2,13 +2,13 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo } 
 import { useQuery } from '@tanstack/react-query';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { getDefaultBackend, getBackendType, BackendType } from '@/app/config/backends';
-import { checkIssuerPin, pinIssuer } from '@/app/config/issuerPinning';
+import { getDefaultBackend, getBackendType, BackendType } from '@/config/backends';
+import { checkIssuerPin, pinIssuer } from '@/config/issuerPinning';
 import { InfoJson, OpenIdConfig, fetchInfoJson, fetchOpenIdConfig } from './backendClient';
-import { getCurrentBackendUrl, setCurrentBackendUrl, getServerSettings, setServerSettings } from '@/app/lib/storage';
+import { getCurrentBackendUrl, setCurrentBackendUrl, getServerSettings, setServerSettings } from '@/lib/storage';
 
 export type BackendStatus = 'checking' | 'ok' | 'error';
-export type { BackendType } from '@/app/config/backends';
+export type { BackendType } from '@/config/backends';
 export type { InfoJson, OpenIdConfig, ServiceConfig } from './backendClient';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
