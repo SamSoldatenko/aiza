@@ -1,8 +1,9 @@
-import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useServerConfig } from './ServerConfigContext';
 import { BackendUserInfo, OAuthUserInfo, TokenRevokedError, fetchCurrentUser, fetchOAuthUserInfo } from './backendClient';
 import { getStoredTokens as getStoredTokensRaw, setStoredTokens as setStoredTokensRaw, getPendingAuth, setPendingAuth, clearPendingAuth } from '@/lib/storage';
+import { useKeyedState } from '@/lib/useKeyedState';
 
 interface PendingAuth {
   codeVerifier: string;
@@ -232,12 +233,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const apiService = infoJson?.api;
   const { issuer, token_endpoint, authorization_endpoint, end_session_endpoint, userinfo_endpoint } = openIdConfig ?? {};
 
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    if (!issuer || !apiService) return;
-    setIsAuthenticated(!!loadToken(issuer, apiService.client_id));
-  }, [issuer, apiService]);
+  const authKey = issuer && apiService ? `${issuer}::${apiService.client_id}` : null;
+  const [isAuthenticated, setIsAuthenticated] = useKeyedState(authKey, () =>
+    !!(issuer && apiService && loadToken(issuer, apiService.client_id))
+  );
 
   const login = useCallback(async () => {
     if (!authorization_endpoint || !token_endpoint || !apiService) {
@@ -289,14 +288,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       // Reload the page to clear application state and reflect the new authentication status.
       location.reload();
     }
-  }, [issuer, end_session_endpoint, apiService]);
+  }, [issuer, end_session_endpoint, apiService, setIsAuthenticated]);
 
   const getApiAccessToken = useCallback(async (): Promise<string | null> => {
     if (!issuer || !apiService || !token_endpoint) return null;
     const token = await fetchAccessToken(issuer, apiService.client_id, token_endpoint);
     setIsAuthenticated(token !== null);
     return token;
-  }, [issuer, apiService, token_endpoint]);
+  }, [issuer, apiService, token_endpoint, setIsAuthenticated]);
 
   const handleOAuthCallback = useCallback(async (code: string, state: string | null) => {
     const pendingAuth = getPendingAuth<PendingAuth>();
@@ -319,7 +318,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     storeToken(response);
     clearPendingAuth();
     setIsAuthenticated(true);
-  }, []);
+  }, [setIsAuthenticated]);
 
   const { data: backendUserInfo, error: backendUserError, refetch: refetchBackendUserInfo } = useQuery({
     queryKey: ['backendUserInfo', backendUrl, isAuthenticated],
@@ -349,12 +348,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     if (!tokenRevoked || !token_endpoint || !apiService || !issuer) return;
 
     const token = loadToken(issuer, apiService.client_id);
-    if (!token?.refresh_token) {
-      logout();
-      return;
-    }
 
-    dedupedTokenRefresh(token_endpoint, apiService.client_id, token.refresh_token)
+    const refresh = token?.refresh_token
+      ? dedupedTokenRefresh(token_endpoint, apiService.client_id, token.refresh_token)
+      : Promise.resolve(null);
+
+    refresh
       .then((refreshResponse) => {
         if (refreshResponse) {
           updateToken(refreshResponse);

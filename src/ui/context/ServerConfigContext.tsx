@@ -2,10 +2,12 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo } 
 import { useQuery } from '@tanstack/react-query';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { getDefaultBackend, getBackendType, BackendType } from '@/config/backends';
 import { checkIssuerPin, pinIssuer } from '@/config/issuerPinning';
 import { InfoJson, OpenIdConfig, fetchInfoJson, fetchOpenIdConfig } from './backendClient';
 import { getCurrentBackendUrl, setCurrentBackendUrl, getServerSettings, setServerSettings } from '@/lib/storage';
+import { useKeyedState } from '@/lib/useKeyedState';
 
 export type BackendStatus = 'checking' | 'ok' | 'error';
 export type { BackendType } from '@/config/backends';
@@ -49,11 +51,9 @@ const lightTheme = createTheme({ palette: { mode: 'light' } });
 const darkTheme = createTheme({ palette: { mode: 'dark' } });
 
 export function ServerConfigProvider({ children }: { children: React.ReactNode }) {
-  const [backendUrl, setBackendUrlState] = useState<string | null>(null);
-
-  useEffect(() => {
-    setBackendUrlState(getCurrentBackendUrl() || getDefaultBackend());
-  }, []);
+  const [backendUrl, setBackendUrlState] = useState<string | null>(
+    () => getCurrentBackendUrl() || getDefaultBackend()
+  );
 
   const infoJsonQuery = useQuery({
     queryKey: ['aiza', backendUrl],
@@ -115,24 +115,11 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
 
   // --- Settings (theme), persisted per-server ---
 
-  const [settings, setSettings] = useState<UserSettings>(defaultSettings);
-  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+  const [settings, setSettings] = useKeyedState(serverId, (id) =>
+    id ? { ...defaultSettings, ...getServerSettings(id, {}) } : defaultSettings
+  );
 
-  useEffect(() => {
-    if (!window.matchMedia) return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    setSystemPrefersDark(mediaQuery.matches);
-
-    const handler = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
-
-  useEffect(() => {
-    if (!serverId) return;
-    setSettings({ ...defaultSettings, ...getServerSettings(serverId, {}) });
-  }, [serverId]);
+  const systemPrefersDark = useMediaQuery('(prefers-color-scheme: dark)', { noSsr: true });
 
   const resolvedTheme: 'light' | 'dark' =
     settings.theme === 'system'
@@ -151,7 +138,7 @@ export function ServerConfigProvider({ children }: { children: React.ReactNode }
       }
       return newSettings;
     });
-  }, [serverId]);
+  }, [serverId, setSettings]);
 
   const muiTheme = resolvedTheme === 'dark' ? darkTheme : lightTheme;
   const infoJson = infoJsonQuery.data ?? null;
