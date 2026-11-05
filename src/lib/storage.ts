@@ -1,6 +1,6 @@
-// Single source of truth for every localStorage key the app uses, and the
-// only place that touches `localStorage` directly. Callers get typed,
-// named accessors instead of raw keys/JSON.parse.
+// Single source of truth for every localStorage/sessionStorage key the app
+// uses, and the only place that touches Web Storage directly. Callers get
+// typed, named accessors instead of raw keys/JSON.parse.
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined';
@@ -116,4 +116,21 @@ export function setPendingAuth(auth: unknown): void {
 
 export function clearPendingAuth(): void {
   removeItem(PENDING_AUTH_KEY);
+}
+
+// --- Last stale-chunk reload (sessionStorage): `aiza_chunk_reload_at` -> epoch ms ---
+// Per-tab on purpose: it only guards one tab against a reload loop.
+
+const CHUNK_RELOAD_AT_KEY = 'aiza_chunk_reload_at';
+
+export function getLastChunkReloadAt(): number | null {
+  if (!isBrowser()) return null;
+  const raw = sessionStorage.getItem(CHUNK_RELOAD_AT_KEY);
+  const value = raw === null ? NaN : Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+export function setLastChunkReloadAt(timestamp: number): void {
+  if (!isBrowser()) return;
+  sessionStorage.setItem(CHUNK_RELOAD_AT_KEY, String(timestamp));
 }

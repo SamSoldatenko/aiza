@@ -4,6 +4,9 @@ import { RouterProvider } from '@tanstack/react-router';
 import '@fontsource-variable/inter';
 import './globals.css';
 import { router } from './router';
+import { installStaleChunkReload } from './lib/staleChunkReload';
+
+installStaleChunkReload();
 
 const rootElement = document.getElementById('root')!;
 
