@@ -1,3 +1,0 @@
-minimumReleaseAgeExclude:
-  - '@tanstack/react-router@1.170.20'
-  - '@tanstack/router-core@1.171.17'

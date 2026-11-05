@@ -26,7 +26,9 @@ pnpm test -- run src/ui/Auth.test.tsx     # Run a single test file (tests are co
 - **src/routes/** - File-based route definitions (one file per route, each rendering a page component from `src/pages/`); includes `__root.tsx` for the root layout and not-found/error components
 - **src/pages/** - Page components, independent of routing
 - **src/ui/RootLayout.tsx** - Root route component; wraps the app with `AizaProvider`, renders `NavBar`, the route `<Outlet />`, `Footer`, and (dev-only) the TanStack devtools panels
-- **src/lib/storage.ts** - Single source of truth for every localStorage key; typed named accessors, no other file touches `localStorage` directly
+- **src/lib/storage.ts** - Single source of truth for every localStorage/sessionStorage key; typed named accessors, no other file touches Web Storage directly
+- **src/lib/staleChunkReload.ts** - Installed from `main.tsx`; on `vite:preloadError` (a tab opened before a deploy requests a lazy chunk that no longer exists) reloads the page once, with a sessionStorage cooldown so a genuinely missing chunk can't cause a reload loop
+- **vite.config.ts** - Splits `node_modules` into `vendor-react`, `vendor-mui` and `vendor-tanstack` chunks so app-only deploys keep their filenames cached
 - **src/ui/context/** - Modular context providers:
   - **AizaProvider.tsx** - Composes providers (ServerConfig → Auth)
   - **ServerConfigContext.tsx** - Backend configuration (fetches `/info.json` and OpenID config, detects URL mismatch, validates the JWT issuer against an allowlist) plus user settings (theme: light/dark/system, persisted per-server), and provides the MUI `ThemeProvider`

@@ -14,6 +14,21 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
   ],
+  build: {
+    rolldownOptions: {
+      output: {
+        // Stable third-party code gets its own long-lived chunks, so a deploy
+        // that only touches app code keeps these filenames (and the browser cache).
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-react', test: /[\\/]node_modules[\\/](react|react-dom|react-is|scheduler)[\\/]/ },
+            { name: 'vendor-mui', test: /[\\/]node_modules[\\/](@mui|@emotion|@popperjs|stylis|react-transition-group)[\\/]/ },
+            { name: 'vendor-tanstack', test: /[\\/]node_modules[\\/]@tanstack[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   define: {
     'import.meta.env.VITE_BUILD_TIMESTAMP': JSON.stringify(new Date().toISOString()),
   },
