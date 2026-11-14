@@ -4,6 +4,7 @@ import { useServerConfig } from './ServerConfigContext';
 import { BackendUserInfo, OAuthUserInfo, TokenRevokedError, fetchCurrentUser, fetchOAuthUserInfo } from './backendClient';
 import { getStoredTokens as getStoredTokensRaw, setStoredTokens as setStoredTokensRaw, getPendingAuth, setPendingAuth, clearPendingAuth } from '@/lib/storage';
 import { useKeyedState } from '@/lib/useKeyedState';
+import { AccessTokenClaims, readAccessTokenClaims } from '@/lib/jwt';
 
 interface PendingAuth {
   codeVerifier: string;
@@ -60,13 +61,23 @@ async function sha256AndBase64(input: string): Promise<string> {
   return base64String.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function parseJwtPayload(token: string): { iss: string; exp: number; client_id: string } {
-  const parts = token.split('.');
-  return JSON.parse(atob(parts[1]));
+function requireAccessTokenClaims(accessToken: string): AccessTokenClaims {
+  const claims = readAccessTokenClaims(accessToken);
+  if (!claims) {
+    throw new Error('Identity provider returned an unreadable access token');
+  }
+  return claims;
 }
 
+// Drops (and persists the removal of) entries whose access token can't be
+// read, so one corrupted entry can't break token lookup for every identity.
 function getStoredTokens(): StoredToken[] {
-  return getStoredTokensRaw<StoredToken>();
+  const stored = getStoredTokensRaw<StoredToken>();
+  const readable = stored.filter((t) => typeof t?.access_token === 'string' && readAccessTokenClaims(t.access_token));
+  if (readable.length !== stored.length) {
+    setStoredTokensRaw(readable);
+  }
+  return readable;
 }
 
 function setStoredTokens(tokens: StoredToken[]): void {
@@ -74,8 +85,8 @@ function setStoredTokens(tokens: StoredToken[]): void {
 }
 
 function tokenMatchesCredentials(token: StoredToken, issuer: string, clientId: string): boolean {
-  const payload = parseJwtPayload(token.access_token);
-  return payload.iss === issuer && payload.client_id === clientId;
+  const claims = readAccessTokenClaims(token.access_token);
+  return claims !== null && claims.iss === issuer && claims.client_id === clientId;
 }
 
 function findTokenIndex(tokens: StoredToken[], issuer: string, clientId: string): number {
@@ -92,7 +103,7 @@ function storeToken(response: TokenExchangeResponse): StoredToken {
     expires_at: Date.now() + response.expires_in * 1000,
   };
 
-  const { iss, client_id } = parseJwtPayload(response.access_token);
+  const { iss, client_id } = requireAccessTokenClaims(response.access_token);
   const tokens = getStoredTokens();
   const index = findTokenIndex(tokens, iss, client_id);
 
@@ -112,7 +123,7 @@ function deleteToken(issuer: string, clientId: string): void {
 }
 
 function updateToken(response: TokenResponse): StoredToken | null {
-  const { iss, client_id } = parseJwtPayload(response.access_token);
+  const { iss, client_id } = requireAccessTokenClaims(response.access_token);
   const tokens = getStoredTokens();
   const index = findTokenIndex(tokens, iss, client_id);
 

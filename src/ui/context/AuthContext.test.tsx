@@ -225,6 +225,43 @@ describe('AuthContext token refresh dedup', () => {
   })
 })
 
+describe('AuthContext stored token robustness', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  test('an unreadable stored token does not break lookup and is dropped', async () => {
+    const validAccessToken = makeJwt({ iss: ISSUER, client_id: CLIENT_ID, exp: 9999999999 })
+    const stored = {
+      id_token: 'id-token',
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'Bearer',
+      expires_at: Date.now() + 3600_000,
+    }
+    setStoredTokens([
+      { ...stored, access_token: 'not-a-jwt' },
+      { ...stored, access_token: validAccessToken },
+    ])
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) }) as Response))
+
+    const { result } = renderHook(() => useAuth(), { wrapper })
+
+    let token: string | null = null
+    await act(async () => {
+      token = await result.current.getApiAccessToken()
+    })
+
+    expect(token).toBe(validAccessToken)
+    expect(getStoredTokens<{ access_token: string }>().map((t) => t.access_token)).toEqual([validAccessToken])
+  })
+})
+
 function wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
