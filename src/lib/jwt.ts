@@ -36,20 +36,3 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
     return null;
   }
 }
-
-export interface AccessTokenClaims {
-  iss: string;
-  exp: number;
-  client_id: string;
-  sub?: string;
-}
-
-// Claims the app relies on for an access token. `client_id` is how Cognito
-// names the app client in access tokens.
-export function readAccessTokenClaims(token: string): AccessTokenClaims | null {
-  const payload = decodeJwtPayload(token);
-  if (!payload) return null;
-  const { iss, exp, client_id, sub } = payload;
-  if (typeof iss !== 'string' || typeof exp !== 'number' || typeof client_id !== 'string') return null;
-  return { iss, exp, client_id, ...(typeof sub === 'string' ? { sub } : {}) };
-}

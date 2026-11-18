@@ -1,165 +1,115 @@
 import { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Divider, Menu, MenuItem, TextField, Button, List, ListItemButton, ListItemText } from '@mui/material';
-import { User, LogOut, KeyRound, Unplug, EarthLock, UserRoundCheck, Key, PlugZap } from 'lucide-react';
-import { DEFAULT_BACKENDS } from '@/config/backends';
-import { getBackendHistory, addBackendToHistory } from '@/lib/storage';
-import { useServerConfig } from './context/ServerConfigContext';
-import { useAuth } from './context/AuthContext';
+import { useRouterState } from '@tanstack/react-router';
+import { Divider, ListItemText, Menu, MenuItem } from '@mui/material';
+import { User, LogOut, KeyRound, UserRoundCheck, Key, DoorOpen } from 'lucide-react';
+import { tokenBroker } from '@/auth/tokenBroker';
+import { displayName, useIdentity } from '@/auth/useIdentity';
+import { useActiveWorkspace } from '@/workspace/useActiveWorkspace';
+import { getWorkspaceInfo, isAvailableHere, workspacesOnDevice } from '@/workspace/registry';
+import { authorizationRequests, identitiesOnlyUsedBy, otherWorkspacesUsing, primaryIdentity } from '@/workspace/signIn';
 import ThemeToggle from './ThemeToggle';
+import { presentationOf } from './workspacePresentation';
+
+function titleOf(id: string): string {
+  const info = getWorkspaceInfo(id);
+  return info ? presentationOf(info).title : id;
+}
 
 export default function Auth(): React.ReactElement {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [customUrl, setCustomUrl] = useState('');
-  const [knownBackends, setKnownBackends] = useState<string[]>([]);
+  const href = useRouterState({ select: (s) => s.location.href });
 
-  const { setBackendUrl, backendType, backendUrl } = useServerConfig();
-  const { login, logout, getApiAccessToken, oauthUserInfo } = useAuth();
+  const workspace = useActiveWorkspace();
+  const identity = workspace ? primaryIdentity(workspace) : undefined;
+  const { state, claims } = useIdentity(identity);
+  const signedIn = state === 'signed-in';
+  const canSignIn = Boolean(workspace && identity && isAvailableHere(workspace));
 
-  const menuOpen = Boolean(anchorEl);
+  const allWorkspaces = anchorEl ? workspacesOnDevice() : [];
+  const sharedWith = workspace && identity ? otherWorkspacesUsing(identity, workspace, allWorkspaces) : [];
 
   function closeMenu(): void {
     setAnchorEl(null);
   }
 
-  function closeDialog(): void {
-    setDialogOpen(false);
-  }
-
-  function handleClick(event: React.MouseEvent<HTMLButtonElement>): void {
-    setAnchorEl(event.currentTarget);
-  }
-
   function handleLogin(): void {
-    login();
     closeMenu();
+    if (!workspace || !identity) return;
+    tokenBroker
+      .login(identity, { requests: authorizationRequests(workspace, identity), workspaceId: workspace.id, returnTo: href })
+      .catch((err) => console.error('Sign-in failed:', err));
   }
 
-  function handleLogout(): void {
-    logout();
+  function handleSignOutWorkspace(): void {
     closeMenu();
+    if (!workspace) return;
+    for (const i of identitiesOnlyUsedBy(workspace, workspacesOnDevice())) {
+      tokenBroker.forget(i).catch((err) => console.error('Sign-out failed:', err));
+    }
+  }
+
+  function handleSignOutAccount(): void {
+    closeMenu();
+    if (identity) tokenBroker.endSession(identity).catch((err) => console.error('Sign-out failed:', err));
   }
 
   async function handleGetAccessKey(): Promise<void> {
+    closeMenu();
+    if (!identity) return;
     try {
-      console.log(await getApiAccessToken());
+      console.log(await tokenBroker.getToken(identity, []));
     } catch (err) {
       console.error('Failed to get access key:', err);
     }
-    closeMenu();
   }
 
-  function handleSwitchBackend(url: string): void {
-    setBackendUrl(url);
-    closeMenu();
-  }
-
-  function handleOpenCustomDialog(): void {
-    setCustomUrl(backendType === 'custom' ? backendUrl ?? '' : '');
-    setKnownBackends(getBackendHistory());
-    setDialogOpen(true);
-    closeMenu();
-  }
-
-  function handleConnectCustom(): void {
-    const url = customUrl.trim();
-    if (url) {
-      setBackendUrl(url);
-      addBackendToHistory(url);
-    }
-    closeDialog();
-  }
-
-  function handleSelectKnownBackend(url: string): void {
-    setBackendUrl(url);
-    closeDialog();
-  }
-
-  function handleCustomUrlKeyDown(e: React.KeyboardEvent): void {
-    if (e.key === 'Enter') {
-      e.stopPropagation();
-      handleConnectCustom();
-    }
-  }
-
-  const tooltip = oauthUserInfo?.name || oauthUserInfo?.username || 'Not logged in';
+  const name = displayName(claims);
+  const tooltip = name ?? 'Not logged in';
   return (
     <div className="relative">
       <button
-        onClick={handleClick}
+        onClick={(e) => setAnchorEl(e.currentTarget)}
         title={tooltip}
         className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
       >
-        {oauthUserInfo ? <UserRoundCheck size={20} /> : <User size={20} />}
+        {signedIn ? <UserRoundCheck size={20} /> : <User size={20} />}
       </button>
       <Menu
         anchorEl={anchorEl}
-        open={menuOpen}
+        open={Boolean(anchorEl)}
         onClose={closeMenu}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem onClick={handleLogin} disabled={Boolean(oauthUserInfo)}>
+        {name && (
+          <MenuItem disabled>
+            <ListItemText primary={name} />
+          </MenuItem>
+        )}
+        <MenuItem onClick={handleLogin} disabled={!canSignIn || signedIn}>
           <KeyRound size={18} className="mr-2" /> Login
         </MenuItem>
-        <MenuItem onClick={handleLogout}>
-          <LogOut size={18} className="mr-2" /> Logout
+        <MenuItem onClick={handleSignOutWorkspace} disabled={!signedIn}>
+          <DoorOpen size={18} className="mr-2" /> Sign out of this workspace
+        </MenuItem>
+        <MenuItem onClick={handleSignOutAccount} disabled={!signedIn}>
+          <LogOut size={18} className="mr-2" />
+          <ListItemText
+            primary="Logout"
+            secondary={sharedWith.length > 0 ? `Also signs out ${sharedWith.map((w) => titleOf(w.id)).join(', ')}` : undefined}
+          />
         </MenuItem>
         <Divider />
         <MenuItem disableRipple sx={{ '&:hover': { backgroundColor: 'transparent' } }}>
           <ThemeToggle />
         </MenuItem>
-        <Divider />
-        <MenuItem onClick={handleGetAccessKey}>
-          <Key size={18} className="mr-2" /> Get Access Key
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={() => handleSwitchBackend(DEFAULT_BACKENDS.prod)} selected={backendType === 'prod'}>
-          <EarthLock size={18} className="mr-2" /> Prod Backend
-        </MenuItem>
-        <MenuItem onClick={() => handleSwitchBackend(DEFAULT_BACKENDS.dev)} selected={backendType === 'dev'}>
-          <Unplug size={18} className="mr-2" /> Dev Backend
-        </MenuItem>
-        <MenuItem onClick={handleOpenCustomDialog} selected={backendType === 'custom'}>
-          <PlugZap size={18} className="mr-2" /> Custom Backend…
-        </MenuItem>
+        {import.meta.env.DEV && <Divider />}
+        {import.meta.env.DEV && (
+          <MenuItem onClick={handleGetAccessKey} disabled={!signedIn}>
+            <Key size={18} className="mr-2" /> Get Access Key
+          </MenuItem>
+        )}
       </Menu>
-      <Dialog open={dialogOpen} onClose={closeDialog} maxWidth="sm" fullWidth disableRestoreFocus>
-        <DialogTitle>Connect to Custom Backend</DialogTitle>
-        <DialogContent>
-          <TextField
-            // oxlint-disable-next-line jsx-a11y/no-autofocus -- deliberate: focus the dialog's only input on open
-            autoFocus
-            margin="dense"
-            label="Backend URL"
-            placeholder="http://localhost:8080"
-            fullWidth
-            variant="outlined"
-            value={customUrl}
-            onChange={(e) => setCustomUrl(e.target.value)}
-            onKeyDown={handleCustomUrlKeyDown}
-          />
-          {knownBackends.length > 0 && (
-            <List dense disablePadding sx={{ mt: 1 }}>
-              {knownBackends.map((url) => (
-                <ListItemButton
-                  key={url}
-                  selected={url === backendUrl}
-                  onClick={() => handleSelectKnownBackend(url)}
-                >
-                  <ListItemText primary={url} />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDialog}>Cancel</Button>
-          <Button onClick={handleConnectCustom} variant="contained" disabled={!customUrl.trim()}>
-            Connect
-          </Button>
-        </DialogActions>
-      </Dialog>
     </div>
   );
 }

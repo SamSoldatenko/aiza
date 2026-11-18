@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { decodeJwtPayload, readAccessTokenClaims } from './jwt'
+import { decodeJwtPayload } from './jwt'
 
 function base64Url(text: string): string {
   const bytes = new TextEncoder().encode(text)
@@ -41,18 +41,5 @@ describe('decodeJwtPayload', () => {
     ['invalid UTF-8', `a.${btoa('\xff\xfe').replace(/=+$/, '')}.c`],
   ])('returns null for %s', (_name, token) => {
     expect(decodeJwtPayload(token)).toBeNull()
-  })
-})
-
-describe('readAccessTokenClaims', () => {
-  test('returns typed claims', () => {
-    const token = makeJwt({ iss: 'https://idp', exp: 123, client_id: 'c', sub: 's', other: 1 })
-    expect(readAccessTokenClaims(token)).toEqual({ iss: 'https://idp', exp: 123, client_id: 'c', sub: 's' })
-  })
-
-  test('returns null when a required claim is missing or has the wrong type', () => {
-    expect(readAccessTokenClaims(makeJwt({ iss: 'https://idp', exp: 123 }))).toBeNull()
-    expect(readAccessTokenClaims(makeJwt({ iss: 'https://idp', exp: '123', client_id: 'c' }))).toBeNull()
-    expect(readAccessTokenClaims('garbage')).toBeNull()
   })
 })

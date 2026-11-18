@@ -13,6 +13,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as Cognito_redirectRouteImport } from './routes/cognito_redirect'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as WorkspacesRouteImport } from './routes/workspaces'
+import { Route as WWorkspaceIdRouteRouteImport } from './routes/w/$workspaceId/route'
+import { Route as WWorkspaceIdIndexRouteImport } from './routes/w/$workspaceId/index'
+import { Route as WWorkspaceIdSettingsRouteImport } from './routes/w/$workspaceId/settings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +38,45 @@ const ProfileRoute = ProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspacesRoute = WorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WWorkspaceIdRouteRoute = WWorkspaceIdRouteRouteImport.update({
+  id: '/w/$workspaceId',
+  path: '/w/$workspaceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WWorkspaceIdIndexRoute = WWorkspaceIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WWorkspaceIdRouteRoute,
+} as any)
+const WWorkspaceIdSettingsRoute = WWorkspaceIdSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => WWorkspaceIdRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/cognito_redirect': typeof Cognito_redirectRoute
   '/profile': typeof ProfileRoute
+  '/workspaces': typeof WorkspacesRoute
+  '/w/$workspaceId': typeof WWorkspaceIdRouteRouteWithChildren
+  '/w/$workspaceId/settings': typeof WWorkspaceIdSettingsRoute
+  '/w/$workspaceId/': typeof WWorkspaceIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/cognito_redirect': typeof Cognito_redirectRoute
   '/profile': typeof ProfileRoute
+  '/workspaces': typeof WorkspacesRoute
+  '/w/$workspaceId/settings': typeof WWorkspaceIdSettingsRoute
+  '/w/$workspaceId': typeof WWorkspaceIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +84,41 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/cognito_redirect': typeof Cognito_redirectRoute
   '/profile': typeof ProfileRoute
+  '/workspaces': typeof WorkspacesRoute
+  '/w/$workspaceId': typeof WWorkspaceIdRouteRouteWithChildren
+  '/w/$workspaceId/settings': typeof WWorkspaceIdSettingsRoute
+  '/w/$workspaceId/': typeof WWorkspaceIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/cognito_redirect' | '/profile'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/cognito_redirect'
+    | '/profile'
+    | '/workspaces'
+    | '/w/$workspaceId'
+    | '/w/$workspaceId/settings'
+    | '/w/$workspaceId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/cognito_redirect' | '/profile'
-  id: '__root__' | '/' | '/about' | '/cognito_redirect' | '/profile'
+  to:
+    | '/'
+    | '/about'
+    | '/cognito_redirect'
+    | '/profile'
+    | '/workspaces'
+    | '/w/$workspaceId/settings'
+    | '/w/$workspaceId'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/cognito_redirect'
+    | '/profile'
+    | '/workspaces'
+    | '/w/$workspaceId'
+    | '/w/$workspaceId/settings'
+    | '/w/$workspaceId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +126,8 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   Cognito_redirectRoute: typeof Cognito_redirectRoute
   ProfileRoute: typeof ProfileRoute
+  WorkspacesRoute: typeof WorkspacesRoute
+  WWorkspaceIdRouteRoute: typeof WWorkspaceIdRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -99,14 +160,57 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workspaces': {
+      id: '/workspaces'
+      path: '/workspaces'
+      fullPath: '/workspaces'
+      preLoaderRoute: typeof WorkspacesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/w/$workspaceId': {
+      id: '/w/$workspaceId'
+      path: '/w/$workspaceId'
+      fullPath: '/w/$workspaceId'
+      preLoaderRoute: typeof WWorkspaceIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/w/$workspaceId/': {
+      id: '/w/$workspaceId/'
+      path: '/'
+      fullPath: '/w/$workspaceId/'
+      preLoaderRoute: typeof WWorkspaceIdIndexRouteImport
+      parentRoute: typeof WWorkspaceIdRouteRoute
+    }
+    '/w/$workspaceId/settings': {
+      id: '/w/$workspaceId/settings'
+      path: '/settings'
+      fullPath: '/w/$workspaceId/settings'
+      preLoaderRoute: typeof WWorkspaceIdSettingsRouteImport
+      parentRoute: typeof WWorkspaceIdRouteRoute
+    }
   }
 }
+
+interface WWorkspaceIdRouteRouteChildren {
+  WWorkspaceIdSettingsRoute: typeof WWorkspaceIdSettingsRoute
+  WWorkspaceIdIndexRoute: typeof WWorkspaceIdIndexRoute
+}
+
+const WWorkspaceIdRouteRouteChildren: WWorkspaceIdRouteRouteChildren = {
+  WWorkspaceIdSettingsRoute: WWorkspaceIdSettingsRoute,
+  WWorkspaceIdIndexRoute: WWorkspaceIdIndexRoute,
+}
+
+const WWorkspaceIdRouteRouteWithChildren =
+  WWorkspaceIdRouteRoute._addFileChildren(WWorkspaceIdRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   Cognito_redirectRoute: Cognito_redirectRoute,
   ProfileRoute: ProfileRoute,
+  WorkspacesRoute: WorkspacesRoute,
+  WWorkspaceIdRouteRoute: WWorkspaceIdRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
