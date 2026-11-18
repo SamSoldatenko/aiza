@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useRouterState } from '@tanstack/react-router';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { Divider, ListItemText, Menu, MenuItem } from '@mui/material';
-import { User, LogOut, KeyRound, UserRoundCheck, Key, DoorOpen } from 'lucide-react';
+import { User, LogOut, KeyRound, UserRoundCheck, Key, DoorOpen, Settings, LayoutGrid } from 'lucide-react';
 import { tokenBroker } from '@/auth/tokenBroker';
 import { displayName, useIdentity } from '@/auth/useIdentity';
 import { useActiveWorkspace } from '@/workspace/useActiveWorkspace';
@@ -18,6 +18,7 @@ function titleOf(id: string): string {
 export default function Auth(): React.ReactElement {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const href = useRouterState({ select: (s) => s.location.href });
+  const navigate = useNavigate();
 
   const workspace = useActiveWorkspace();
   const identity = workspace ? primaryIdentity(workspace) : undefined;
@@ -51,6 +52,16 @@ export default function Auth(): React.ReactElement {
   function handleSignOutAccount(): void {
     closeMenu();
     if (identity) tokenBroker.endSession(identity).catch((err) => console.error('Sign-out failed:', err));
+  }
+
+  function handleWorkspaceSettings(): void {
+    closeMenu();
+    if (workspace) navigate({ to: '/w/$workspaceId/settings', params: { workspaceId: workspace.id } });
+  }
+
+  function handleAllWorkspaces(): void {
+    closeMenu();
+    navigate({ to: '/workspaces' });
   }
 
   async function handleGetAccessKey(): Promise<void> {
@@ -98,6 +109,13 @@ export default function Auth(): React.ReactElement {
             primary="Logout"
             secondary={sharedWith.length > 0 ? `Also signs out ${sharedWith.map((w) => titleOf(w.id)).join(', ')}` : undefined}
           />
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleWorkspaceSettings} disabled={!workspace}>
+          <Settings size={18} className="mr-2" /> Workspace settings
+        </MenuItem>
+        <MenuItem onClick={handleAllWorkspaces}>
+          <LayoutGrid size={18} className="mr-2" /> All workspaces
         </MenuItem>
         <Divider />
         <MenuItem disableRipple sx={{ '&:hover': { backgroundColor: 'transparent' } }}>

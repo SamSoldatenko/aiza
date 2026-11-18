@@ -4,7 +4,6 @@ import { Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText } fr
 import { Home, User, Bug, Info, Menu, X } from 'lucide-react';
 import Auth from './Auth';
 import NavLink from './NavLink';
-import WorkspaceStatusIndicator from './WorkspaceStatusIndicator';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 interface NavItem {
@@ -71,7 +70,6 @@ export default function NavBar(): React.ReactElement {
           </div>
           <div className="flex items-center gap-2">
             <WorkspaceSwitcher />
-            <WorkspaceStatusIndicator />
             <Auth />
           </div>
         </div>
