@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Link, useRouterState } from '@tanstack/react-router';
+import { Link, useParams, useRouterState } from '@tanstack/react-router';
 import { Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
 import { Home, User, Bug, Info, Menu, X } from 'lucide-react';
 import Auth from './Auth';
 import NavLink from './NavLink';
-import BackendMismatchBanner from './BackendMismatchBanner';
-import BackendStatusIndicator from './BackendStatusIndicator';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 interface NavItem {
   label: string;
@@ -14,12 +13,14 @@ interface NavItem {
   external?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { label: 'Home', href: '/', icon: <Home size={18} /> },
-  { label: 'Profile', href: '/profile', icon: <User size={18} /> },
-  { label: 'JWT debug', href: '/jwttest.html', icon: <Bug size={18} />, external: true },
-  { label: 'About', href: '/about', icon: <Info size={18} /> },
-];
+function getNavItems(workspaceId: string | undefined): NavItem[] {
+  return [
+    { label: 'Home', href: workspaceId ? `/w/${workspaceId}/` : '/', icon: <Home size={18} /> },
+    { label: 'Profile', href: '/profile', icon: <User size={18} /> },
+    { label: 'JWT debug', href: '/jwttest.html', icon: <Bug size={18} />, external: true },
+    { label: 'About', href: '/about', icon: <Info size={18} /> },
+  ];
+}
 
 function isNavItemActive(item: NavItem, pathname: string): boolean {
   return !item.external && pathname === item.href;
@@ -27,6 +28,8 @@ function isNavItemActive(item: NavItem, pathname: string): boolean {
 
 export default function NavBar(): React.ReactElement {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { workspaceId } = useParams({ strict: false });
+  const navItems = getNavItems(workspaceId);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   function handleDrawerToggle(): void {
@@ -39,7 +42,6 @@ export default function NavBar(): React.ReactElement {
 
   return (
     <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-      <BackendMismatchBanner />
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center space-x-4">
@@ -67,7 +69,7 @@ export default function NavBar(): React.ReactElement {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <BackendStatusIndicator />
+            <WorkspaceSwitcher />
             <Auth />
           </div>
         </div>

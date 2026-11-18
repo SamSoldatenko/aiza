@@ -17,6 +17,12 @@ export default defineConfig({
   build: {
     rolldownOptions: {
       output: {
+        // Workspace records store the class name (`Class.name`) of their
+        // workspace, so the minifier must keep class names.
+        minify: {
+          compress: { keepNames: { function: false, class: true } },
+          mangle: { keepNames: { function: false, class: true } },
+        },
         // Stable third-party code gets its own long-lived chunks, so a deploy
         // that only touches app code keeps these filenames (and the browser cache).
         codeSplitting: {

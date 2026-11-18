@@ -5,8 +5,10 @@ import '@fontsource-variable/inter';
 import './globals.css';
 import { router } from './router';
 import { installStaleChunkReload } from './lib/staleChunkReload';
+import { migrateLegacyStorage } from './lib/storage';
 
 installStaleChunkReload();
+migrateLegacyStorage();
 
 const rootElement = document.getElementById('root')!;
 
