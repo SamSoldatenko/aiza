@@ -423,6 +423,31 @@
             width: 100px;
         }
 
+        .tokens-group-title {
+            font-size: var(--font-size-base);
+            margin: var(--spacing-6) 0 var(--spacing-3);
+        }
+
+        .tokens-group-title:first-child {
+            margin-top: 0;
+        }
+
+        .tokens-group-title code,
+        .muted {
+            color: var(--color-neutral-500);
+            font-weight: normal;
+            font-size: var(--font-size-xs);
+        }
+
+        .token-title {
+            margin-bottom: var(--spacing-2);
+            word-break: break-all;
+        }
+
+        .token-item.in-tests {
+            background: var(--color-success-bg);
+        }
+
         .text-red { color: var(--color-error); }
         .text-green { color: var(--color-success); }
 
@@ -477,19 +502,21 @@
             <div class="card-header">
                 <div>
                     <h2 class="card-title">Configuration</h2>
-                    <p class="card-description">Select backend server for API requests</p>
+                    <p class="card-description">Backend server for API requests; the identity the app signs in to it with
+                        fills Authorization URL and Client ID</p>
                 </div>
             </div>
 
             <div class="config-item">
                 <label class="form-label">Backend Server</label>
                 <select id="backend-select" class="form-select" style="max-width: 400px;">
-                    <option value="dev">Dev (localhost:8080)</option>
-                    <option value="prod">Prod (aiza-be.bin932.com:3150)</option>
-                    <option value="custom">Custom URL...</option>
+                    <option value="dev">Dev (localhost:8080, aiza-dev pool)</option>
+                    <option value="prod">Prod (aiza-be.bin932.com:3150, aiza-users pool)</option>
+                    <option value="custom">Custom URL (OpenID config from its info.json)...</option>
                 </select>
                 <input type="text" id="backend-custom" class="form-input" placeholder="https://your-server.com:port"
                     style="display: none; max-width: 400px;" />
+                <div class="backend-status" id="identity-status"></div>
                 <div class="backend-status" id="backend-status"></div>
             </div>
         </section>
@@ -540,7 +567,7 @@
 
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Open Login Page</button>
-                    <button type="button" class="btn btn-secondary" onclick="applyOpenIdConfig()">Reset to Config</button>
+                    <button type="button" class="btn btn-secondary" onclick="applyAuthConfig()">Reset to Config</button>
                 </div>
             </form>
         </section>
@@ -585,7 +612,11 @@
             <table class="test-table" style="margin-bottom: var(--spacing-4); font-size: var(--font-size-xs); font-family: var(--font-mono);">
                 <tbody>
                     <tr>
-                        <td style="width: 150px;"><strong>Valid Token (id)</strong></td>
+                        <td style="width: 150px;"><strong>Token source</strong></td>
+                        <td><span id="token-source-display" style="color: var(--color-neutral-500);"></span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Valid Token (id)</strong></td>
                         <td><span id="valid-token-id-display" style="color: var(--color-neutral-500);">(none)</span></td>
                     </tr>
                     <tr>
@@ -705,11 +736,14 @@
             <div class="card-header">
                 <div>
                     <h2 class="card-title">Stored Tokens</h2>
-                    <p class="card-description">JWT tokens stored in localStorage</p>
+                    <p class="card-description">Sessions of the app and tokens obtained on this page (localStorage).
+                        Refreshing an app grant follows the app's protocol: same cross-tab lock, same session
+                        generation, app tabs notified</p>
                 </div>
-                <button class="btn btn-secondary btn-sm" onclick="print_tokens()">Refresh</button>
+                <button class="btn btn-secondary btn-sm" id="reload-tokens">Reload</button>
             </div>
 
+            <div class="backend-status" id="tokens-status" style="margin-bottom: var(--spacing-3);"></div>
             <div class="tokens-list" id="tokens-report"></div>
         </section>
     </main>
@@ -718,183 +752,384 @@
         integrity="sha256-kmHvs0B+OpCW5GVHUNjv9rOmY0IvSIRcf7zGUDTDQM8=" crossorigin="anonymous"></script>
     <script type="application/javascript">
         // ============================================
-        // Backend Configuration Module
+        // Identities and backends
         // ============================================
-        const BACKENDS = {
-            dev: 'http://localhost:8080',
-            prod: 'https://aiza-be.bin932.com:3150'
+        // Identities as defined in code in src/workspace/identities.ts (keep in
+        // sync). Refresh tokens of the app's sessions are only ever sent to the
+        // token endpoint discovered from one of these issuers, never to one a
+        // backend reports in its info.json.
+        const IDENTITIES = {
+            bin932: {
+                name: 'bin932 (aiza-users pool)',
+                issuer: 'https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_SSH5Zn4xD',
+                clientId: '41n5fausr4m817q9uko6rkb5ni',
+                scopes: ['openid', 'email']
+            },
+            aizaDev: {
+                name: 'aizaDev (aiza-dev pool)',
+                issuer: 'https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_qs3qDxzG6',
+                clientId: '5i4qun7gn2e58g2gun70637plk',
+                scopes: ['openid', 'email']
+            }
         };
 
-        const DEFAULT_TOKEN_ENDPOINT = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/token';
-        const DEFAULT_USERINFO_URL   = 'https://aiza.auth.eu-central-1.amazoncognito.com/oauth2/userInfo';
-        const DEFAULT_CLIENT_ID      = '41n5fausr4m817q9uko6rkb5ni';
-        const DEFAULT_SCOPE          = 'openid email';
+        // Built-in workspaces of src/workspace/registry.ts: the backend and the
+        // identity signing in to it.
+        const BACKENDS = {
+            dev: { url: 'http://localhost:8080', identity: IDENTITIES.aizaDev },
+            prod: { url: 'https://aiza-be.bin932.com:3150', identity: IDENTITIES.bin932 }
+        };
 
-        let currentBackend = null;
-        let openIdConfig = null; // { clientId, authorizationEndpoint, tokenEndpoint }
+        // The app's sessions (src/lib/storage.ts), written here only the way the
+        // app's TokenBroker writes them; and this page's own keys.
+        const APP_SESSIONS_KEY = 'aiza:auth:sessions';
+        const PAGE_TOKENS_KEY = 'jwttest_tokens';
+        const PAGE_VERIFIER_KEY = 'jwttest_code_verifier';
+        const PAGE_BACKEND_KEY = 'jwttest_backend';
 
-        async function loadOpenIdConfig(backendUrl) {
-            try {
-                const infoRes = await fetch(backendUrl + '/info.json');
-                if (!infoRes.ok) return { config: null, reachable: false };
-                const info = await infoRes.json();
-                const openIdUrl = info['openid-configuration'];
-                if (!openIdUrl) return { config: null, reachable: true };
-                const openIdRes = await fetch(openIdUrl);
-                if (!openIdRes.ok) return { config: null, reachable: true };
-                const oidc = await openIdRes.json();
-                return {
-                    config: {
-                        clientId: info.api?.client_id || info.client_id || '',
-                        authorizationEndpoint: oidc.authorization_endpoint || '',
-                        tokenEndpoint: oidc.token_endpoint || '',
-                        userinfoEndpoint: oidc.userinfo_endpoint || '',
-                        revocationEndpoint: oidc.revocation_endpoint || ''
-                    },
-                    reachable: true
-                };
-            } catch (e) {
-                console.error('[openid] loadOpenIdConfig error:', e);
-                return { config: null, reachable: false };
+        // Change notifications of the app (src/auth/sessionStore.ts): open app
+        // tabs re-read the sessions when a message arrives.
+        const appChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('aiza:identities') : null;
+
+        let currentBackend = null;   // URL of the selected backend
+        let currentIdentity = null;  // entry of IDENTITIES; null for a custom backend
+        let authConfig = null;       // { source, clientId, scope, authorizationEndpoint, tokenEndpoint, userinfoEndpoint }
+        let selectionSeq = 0;        // ignores results of an earlier selection
+
+        function identityKey(identity) {
+            return identity.issuer + '|' + identity.clientId;
+        }
+
+        function identityOfKey(key) {
+            return Object.values(IDENTITIES).find(identity => identityKey(identity) === key) || null;
+        }
+
+        // Key of the sign-in grant: grantKey() of src/auth/session.ts without service scopes.
+        function signInGrantKey(identity) {
+            return [...new Set(identity.scopes)].sort().join(' ');
+        }
+
+        const discoveryCache = new Map();
+
+        // OpenID discovery of an issuer; the document must name that issuer.
+        function discover(issuer) {
+            let promise = discoveryCache.get(issuer);
+            if (!promise) {
+                promise = fetchJson(issuer.replace(/\/+$/, '') + '/.well-known/openid-configuration').then(config => {
+                    if (config.issuer !== issuer) throw new Error('Discovery document names another issuer: ' + config.issuer);
+                    return config;
+                });
+                promise.catch(() => discoveryCache.delete(issuer));
+                discoveryCache.set(issuer, promise);
             }
+            return promise;
         }
 
-        function getTokenEndpointUrl() {
-            return openIdConfig?.tokenEndpoint || DEFAULT_TOKEN_ENDPOINT;
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('HTTP ' + response.status + ' from ' + url);
+            return response.json();
         }
 
-        function applyOpenIdConfig() {
-            if (!openIdConfig) return;
-            $('#authorization-url-input').val(openIdConfig.authorizationEndpoint);
-            $('#client-id-input').val(openIdConfig.clientId);
-            const userinfoTest = TEST_ENDPOINTS.find(e => e.isExternal);
-            if (userinfoTest && openIdConfig.userinfoEndpoint) {
-                userinfoTest.url = openIdConfig.userinfoEndpoint;
-            }
+        function postForm(url, form) {
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(form)
+            });
         }
 
-
+        // ============================================
+        // Backend selection
+        // ============================================
         function initBackendSelector() {
             const select = $('#backend-select');
             const customInput = $('#backend-custom');
 
-            // Auto-detect default based on current URL
-            if (location.host === 'localhost:3000') {
-                currentBackend = BACKENDS.dev;
-                select.val('dev');
+            const saved = localStorage.getItem(PAGE_BACKEND_KEY);
+            if (saved && BACKENDS[saved]) {
+                select.val(saved);
+            } else if (saved) {
+                select.val('custom');
+                customInput.val(saved).show();
             } else {
-                currentBackend = BACKENDS.prod;
-                select.val('prod');
+                select.val(location.hostname === 'localhost' ? 'dev' : 'prod');
             }
-
-            // Check localStorage for saved preference
-            const savedBackend = localStorage.getItem('jwttest_backend');
-            if (savedBackend) {
-                if (BACKENDS[savedBackend]) {
-                    currentBackend = BACKENDS[savedBackend];
-                    select.val(savedBackend);
-                } else {
-                    currentBackend = savedBackend;
-                    select.val('custom');
-                    customInput.val(savedBackend).show();
-                }
-            }
-
-            updateBackendStatus();
+            selectBackend();
 
             select.on('change', function () {
-                const value = $(this).val();
-                if (value === 'custom') {
+                if (select.val() === 'custom') {
                     customInput.show().focus();
+                    if (customInput.val().trim()) selectBackend();
                 } else {
                     customInput.hide();
-                    currentBackend = BACKENDS[value];
-                    localStorage.setItem('jwttest_backend', value);
-                    updateBackendStatus();
+                    selectBackend();
                 }
             });
-
-            customInput.on('blur', function () {
-                const url = $(this).val().trim();
-                if (url) {
-                    currentBackend = url.replace(/\/$/, '');
-                    localStorage.setItem('jwttest_backend', currentBackend);
-                    updateBackendStatus();
-                }
-            });
+            customInput.on('change', selectBackend);
         }
 
-        function updateBackendStatus() {
-            const statusEl = $('#backend-status');
-            statusEl.html('<span class="status-pending">Testing connection...</span>');
+        function selectBackend() {
+            const value = $('#backend-select').val();
+            if (value === 'custom') {
+                const url = $('#backend-custom').val().trim().replace(/\/+$/, '');
+                if (!url) return;
+                currentBackend = url;
+                currentIdentity = null;
+                localStorage.setItem(PAGE_BACKEND_KEY, url);
+            } else {
+                currentBackend = BACKENDS[value].url;
+                currentIdentity = BACKENDS[value].identity;
+                localStorage.setItem(PAGE_BACKEND_KEY, value);
+            }
+            const seq = ++selectionSeq;
 
-            loadOpenIdConfig(currentBackend).then(({ config, reachable }) => {
-                if (config) {
-                    openIdConfig = config;
-                    applyOpenIdConfig();
-                    statusEl.html('<span class="status-success">&#10003; Connected to ' + currentBackend + '</span>');
-                } else if (reachable) {
-                    statusEl.html('<span class="status-warning">&#9888; Reachable but no OpenID config</span>');
-                } else {
-                    statusEl.html('<span class="status-error">&#10007; Connection failed</span>');
-                }
+            // What is known without the network is shown right away.
+            authConfig = null;
+            $('#authorization-url-input').val('').attr('placeholder', 'Loading…');
+            $('#client-id-input').val(currentIdentity ? currentIdentity.clientId : '').attr('placeholder', 'Loading…');
+            if (currentIdentity) $('#scope-input').val(currentIdentity.scopes.join(' '));
+            setStatus('#identity-status', 'pending', currentIdentity
+                ? 'Identity ' + currentIdentity.name + ': loading OpenID configuration…'
+                : 'Custom backend: loading OpenID configuration from its info.json…');
+
+            loadAuthConfig().then(config => {
+                if (seq !== selectionSeq) return;
+                authConfig = config;
+                applyAuthConfig();
+                setStatus('#identity-status', 'success', 'Sign-in: ' + config.source);
+            }).catch(error => {
+                if (seq !== selectionSeq) return;
+                console.error('[openid]', error);
+                $('#authorization-url-input').attr('placeholder', 'Not available');
+                $('#client-id-input').attr('placeholder', 'Not available');
+                setStatus('#identity-status', 'error', 'OpenID configuration not loaded: ' + error.message);
             });
+
+            checkBackend(seq);
+            clearTestResults();
+            renderTokens();
+        }
+
+        async function loadAuthConfig() {
+            if (currentIdentity) {
+                const oidc = await discover(currentIdentity.issuer);
+                return {
+                    source: 'identity ' + currentIdentity.name + ' (as in src/workspace/identities.ts)',
+                    clientId: currentIdentity.clientId,
+                    scope: currentIdentity.scopes.join(' '),
+                    authorizationEndpoint: oidc.authorization_endpoint,
+                    tokenEndpoint: oidc.token_endpoint,
+                    userinfoEndpoint: oidc.userinfo_endpoint
+                };
+            }
+            // Custom backend: what its info.json reports. Used for this page's
+            // own flow only, never for the app's sessions.
+            const info = await fetchJson(currentBackend + '/info.json');
+            const openIdUrl = info['openid-configuration'];
+            if (!openIdUrl) throw new Error('info.json has no openid-configuration');
+            const oidc = await fetchJson(openIdUrl);
+            return {
+                source: 'info.json of ' + currentBackend,
+                clientId: info.api?.client_id || info.client_id || '',
+                scope: 'openid email',
+                authorizationEndpoint: oidc.authorization_endpoint || '',
+                tokenEndpoint: oidc.token_endpoint || '',
+                userinfoEndpoint: oidc.userinfo_endpoint || ''
+            };
+        }
+
+        // Fills the PKCE form from the configuration (also "Reset to Config").
+        function applyAuthConfig() {
+            if (!authConfig) return;
+            $('#authorization-url-input').val(authConfig.authorizationEndpoint);
+            $('#client-id-input').val(authConfig.clientId);
+            $('#scope-input').val(authConfig.scope);
+        }
+
+        async function checkBackend(seq) {
+            setStatus('#backend-status', 'pending', 'Backend ' + currentBackend + ': testing connection…');
+            let info;
+            try {
+                info = await fetchJson(currentBackend + '/info.json');
+            } catch (error) {
+                if (seq === selectionSeq) setStatus('#backend-status', 'error', 'Backend ' + currentBackend + ': connection failed');
+                return;
+            }
+            if (seq !== selectionSeq) return;
+            const reported = info.api?.client_id || info.client_id;
+            if (currentIdentity && reported && reported !== currentIdentity.clientId) {
+                setStatus('#backend-status', 'warning', 'Backend ' + currentBackend + ' reports client id ' + reported +
+                    ', the app signs in to it with ' + currentIdentity.clientId);
+            } else {
+                setStatus('#backend-status', 'success', 'Connected to ' + currentBackend);
+            }
         }
 
         function getBackendUrl() {
             return currentBackend;
         }
 
+        const STATUS_ICONS = { pending: '', success: '✓ ', warning: '⚠ ', error: '✗ ' };
+
+        function setStatus(selector, kind, text) {
+            $(selector).html('<span class="status-' + kind + '">' + STATUS_ICONS[kind] + escapeHtml(text) + '</span>');
+        }
+
         // ============================================
-        // Token Helper Functions
+        // JWT helpers
+        // ============================================
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        }
+
+        // base64url (unpadded) JSON, decoded as UTF-8.
+        function decodeJwtPart(part) {
+            const base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+            const binary = atob(base64 + '='.repeat((4 - base64.length % 4) % 4));
+            return JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0))));
+        }
+
+        function decodeJwtPayload(token) {
+            try {
+                const parts = String(token).split('.');
+                if (parts.length < 2) return null;
+                const payload = decodeJwtPart(parts[1]);
+                return payload && typeof payload === 'object' ? payload : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function shorten(token) {
+            return token.length > 40 ? token.substring(0, 20) + '…' + token.substring(token.length - 8) : token;
+        }
+
+        // ============================================
+        // Storage
+        // ============================================
+        function readJson(key, fallback) {
+            try {
+                const raw = localStorage.getItem(key);
+                return raw === null ? fallback : JSON.parse(raw);
+            } catch {
+                return fallback;
+            }
+        }
+
+        function readAppSessions() {
+            const value = readJson(APP_SESSIONS_KEY, {});
+            return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        }
+
+        // Writes (or, with null, removes) one session and notifies the app's tabs.
+        function writeAppSession(idKey, session) {
+            const sessions = readAppSessions();
+            if (session) sessions[idKey] = session;
+            else delete sessions[idKey];
+            localStorage.setItem(APP_SESSIONS_KEY, JSON.stringify(sessions));
+            appChannel?.postMessage({ type: 'changed', identityKey: idKey });
+        }
+
+        function readPageTokens() {
+            const value = readJson(PAGE_TOKENS_KEY, []);
+            return Array.isArray(value) ? value : [];
+        }
+
+        function writePageTokens(tokens) {
+            localStorage.setItem(PAGE_TOKENS_KEY, JSON.stringify(tokens));
+        }
+
+        // A new token of the same issuer, client and scopes replaces the old one.
+        function mergePageToken(tokens, token) {
+            const payload = decodeJwtPayload(token.access_token) || {};
+            const index = tokens.findIndex(t => {
+                const p = decodeJwtPayload(t.access_token) || {};
+                return p.iss === payload.iss && t.client_id === token.client_id && p.scope === payload.scope;
+            });
+            if (index < 0) return [...tokens, token];
+            const result = [...tokens];
+            result[index] = token;
+            return result;
+        }
+
+        // ============================================
+        // Tokens used by the tests
         // ============================================
         const INVALID_TOKEN = 'invalid.jwt.token.for.testing';
 
+        // null: automatic (the sign-in grant of the selected backend's identity,
+        // else this page's first token); { kind: 'app', idKey, grantKey } or
+        // { kind: 'page', index } after "Use in tests".
+        let testSource = null;
+
+        function resolveTestTokens() {
+            const sessions = readAppSessions();
+            const fromApp = (idKey, grantKey) => {
+                const session = sessions[idKey];
+                const grant = session?.grants?.[grantKey];
+                if (!grant) return null;
+                const name = identityOfKey(idKey)?.name || idKey;
+                return {
+                    source: { kind: 'app', idKey, grantKey },
+                    label: 'app session of ' + name + ', grant "' + grantKey + '"',
+                    idToken: session.idToken || null,
+                    accessToken: grant.accessToken || null
+                };
+            };
+            const fromPage = index => {
+                const token = readPageTokens()[index];
+                if (!token) return null;
+                return {
+                    source: { kind: 'page', index },
+                    label: 'token #' + (index + 1) + ' of this page',
+                    idToken: token.id_token || null,
+                    accessToken: token.access_token || null
+                };
+            };
+
+            if (testSource?.kind === 'app') {
+                const chosen = fromApp(testSource.idKey, testSource.grantKey);
+                if (chosen) return chosen;
+            } else if (testSource?.kind === 'page') {
+                const chosen = fromPage(testSource.index);
+                if (chosen) return chosen;
+            }
+            const auto = (currentIdentity && fromApp(identityKey(currentIdentity), signInGrantKey(currentIdentity))) || fromPage(0);
+            return auto
+                ? { ...auto, label: auto.label + ' (automatic)' }
+                : { source: null, label: 'none: sign in in the app or use steps 1 and 2', idToken: null, accessToken: null };
+        }
+
         function getTokenForRequest(mode) {
-            const tokens = read_tokens();
             switch (mode) {
-                case 'none':
-                    return null;
                 case 'invalid':
                     return INVALID_TOKEN;
                 case 'valid-id':
-                    return tokens[0]?.id_token || null;
+                    return resolveTestTokens().idToken;
                 case 'valid-access':
-                    return tokens[0]?.access_token || null;
+                    return resolveTestTokens().accessToken;
                 default:
                     return null;
             }
         }
 
         function formatTokenDisplay(token, usernameFields) {
-            try {
-                const payload = parse_payload(token);
-                const exp = new Date(payload.exp * 1000);
-                const isExpired = exp < new Date();
-                const username = usernameFields.reduce((found, field) => found || payload[field], null) || 'Unknown';
-                const truncated = token.substring(0, 20) + '...' + token.substring(token.length - 8);
-                const statusColor = isExpired ? 'var(--color-error)' : 'var(--color-success)';
-                const statusText = isExpired ? 'EXPIRED' : 'valid';
-                return `<span style="color: ${statusColor};">${username} (${statusText})</span><br/><code style="background: var(--color-neutral-100); padding: 2px 6px; border-radius: var(--radius-sm);">${truncated}</code>`;
-            } catch (e) {
-                return '(parse error)';
-            }
+            if (!token) return '<span style="color: var(--color-error);">(no token)</span>';
+            const payload = decodeJwtPayload(token);
+            if (!payload) return '(not a JWT)';
+            const isExpired = new Date(payload.exp * 1000) < new Date();
+            const username = usernameFields.reduce((found, field) => found || payload[field], null) || 'Unknown';
+            const statusColor = isExpired ? 'var(--color-error)' : 'var(--color-success)';
+            return `<span style="color: ${statusColor};">${escapeHtml(username)} (${isExpired ? 'EXPIRED' : 'valid'})</span><br/>` +
+                `<code style="background: var(--color-neutral-100); padding: 2px 6px; border-radius: var(--radius-sm);">${escapeHtml(shorten(token))}</code>`;
         }
 
         function updateTokensDisplay() {
-            const tokens = read_tokens();
-            const idDisplayEl = $('#valid-token-id-display');
-            const accessDisplayEl = $('#valid-token-access-display');
-
-            if (tokens.length === 0) {
-                const noTokenMsg = '<span style="color: var(--color-error);">(no token)</span>';
-                idDisplayEl.html(noTokenMsg);
-                accessDisplayEl.html(noTokenMsg);
-                return;
-            }
-
-            idDisplayEl.html(formatTokenDisplay(tokens[0].id_token, ['username', 'sub', 'email']));
-            accessDisplayEl.html(formatTokenDisplay(tokens[0].access_token, ['username', 'sub']));
+            const tokens = resolveTestTokens();
+            $('#token-source-display').text(tokens.label);
+            $('#valid-token-id-display').html(formatTokenDisplay(tokens.idToken, ['email', 'cognito:username', 'username', 'sub']));
+            $('#valid-token-access-display').html(formatTokenDisplay(tokens.accessToken, ['username', 'sub']));
         }
 
         // ============================================
@@ -950,7 +1185,6 @@
                 name: 'userinfo',
                 access: 'authorized',
                 isExternal: true,
-                url: DEFAULT_USERINFO_URL,
                 expectedResults: {
                     'none': { shouldSucceed: false, expectedCode: 400 },
                     'valid-id': { shouldSucceed: false, expectedCode: 401 },
@@ -963,28 +1197,22 @@
         const TOKEN_MODES = ['none', 'valid-id', 'valid-access', 'invalid'];
 
         async function runSingleTest(endpoint, tokenMode) {
-            const resultId = `result-${endpoint.name}-${tokenMode}`;
-            const resultEl = $(`#${resultId}`);
-
+            const resultEl = $(`#result-${endpoint.name}-${tokenMode}`);
             resultEl.html('<span class="test-status pending">...</span>');
 
             const token = getTokenForRequest(tokenMode);
-
             const headers = {};
             if (token) {
                 headers['Authorization'] = 'Bearer ' + token;
             }
 
-            // Determine URL - external endpoints have their own URL, others use backend
-            const requestUrl = endpoint.isExternal ? endpoint.url : getBackendUrl() + endpoint.path;
-
+            // The userInfo endpoint is the identity provider's, the others are the backend's.
+            const requestUrl = endpoint.isExternal ? authConfig?.userinfoEndpoint : getBackendUrl() + endpoint.path;
             const startTime = performance.now();
 
             try {
-                const response = await fetch(requestUrl, {
-                    method: 'GET',
-                    headers: headers
-                });
+                if (!requestUrl) throw new Error('No userinfo endpoint: OpenID configuration not loaded');
+                const response = await fetch(requestUrl, { method: 'GET', headers: headers });
 
                 const elapsed = Math.round(performance.now() - startTime);
                 const body = await response.text();
@@ -1054,9 +1282,8 @@
             const btn = $('#run-all-tests');
             btn.prop('disabled', true).text('Running...');
 
-            const tokens = read_tokens();
-            if (tokens.length === 0) {
-                alert('No tokens stored. Tests with "Valid Token" will fail. Complete login flow first for full testing.');
+            if (!resolveTestTokens().accessToken) {
+                alert('No tokens. Tests with "Valid Token" will fail. Sign in in the app or complete steps 1 and 2 for full testing.');
             }
 
             for (const endpoint of TEST_ENDPOINTS) {
@@ -1072,16 +1299,13 @@
         function clearTestResults() {
             TEST_ENDPOINTS.forEach(ep => {
                 TOKEN_MODES.forEach(mode => {
-                    $(`#result-${ep.name}-${mode}`).html('-').removeData('result');
+                    $(`#result-${ep.name}-${mode}`).html('-').removeData('result').off('click');
                 });
             });
             $('#response-details').hide();
         }
 
         function showResponseDetails(result) {
-            const detailsEl = $('#response-details');
-            const bodyEl = $('#response-body');
-
             let content = `Request: ${result.url || '(unknown)'}\n`;
             content += `Status: ${result.status}\n`;
             content += `Time: ${result.elapsed}ms\n`;
@@ -1098,192 +1322,384 @@
                 content += `Error: ${result.error}`;
             }
 
-            bodyEl.text(content);
-            detailsEl.show();
+            $('#response-body').text(content);
+            $('#response-details').show();
         }
 
         // ============================================
-        // Token Storage Functions (existing, updated)
+        // Stored Tokens
         // ============================================
-        function read_tokens() {
-            return JSON.parse(localStorage.getItem('aiza_tokens') || '[]');
+        // Values of the "Copy" buttons of the last render.
+        let copyValues = [];
+        // Ids of the "Details" blocks left open: kept open across re-renders.
+        const openDetails = new Set();
+
+        function copyButton(value) {
+            copyValues.push(value);
+            return `<button class="btn btn-sm btn-secondary" title="Copy to clipboard" data-action="copy" data-copy="${copyValues.length - 1}">Copy</button>`;
         }
 
-        function write_tokens(tokens) {
-            localStorage.setItem('aiza_tokens', JSON.stringify(tokens));
+        function actionButton(label, data, enabled = true) {
+            const attrs = Object.entries(data).map(([k, v]) => `data-${k}="${escapeHtml(v)}"`).join(' ');
+            return `<button class="btn btn-sm btn-secondary" ${attrs}${enabled ? '' : ' disabled'}>${label}</button>`;
         }
 
-        function parse_payload(s) {
-            const parts = s.split('.');
-            return JSON.parse(atob(parts[1]));
-        }
-
-        function merge_tokens(tokens, token) {
-            const payload = parse_payload(token.access_token);
-            const existingIndex = tokens.findIndex(t => {
-                const p = parse_payload(t.access_token);
-                return payload.iss === p.iss && payload.client_id === p.client_id && payload.scope === p.scope;
-            });
-
-            if (existingIndex >= 0) {
-                const result = [...tokens];
-                result[existingIndex] = token;
-                return result;
+        // A stored value as indented JSON. Long strings (tokens) show their first
+        // 25 characters and a Copy button; `annotate(path, value)` adds HTML
+        // after a value (an object: after its opening brace).
+        function jsonHtml(value, { truncate = true, annotate = () => '' } = {}, path = [], indent = 0) {
+            const pad = n => '&nbsp;&nbsp;'.repeat(n);
+            const note = annotate(path, value) || '';
+            if (value === null || typeof value !== 'object') {
+                if (truncate && typeof value === 'string' && value.length > 40) {
+                    return `"${escapeHtml(value.substring(0, 25))}...${copyButton(value)}"${note}`;
+                }
+                return escapeHtml(JSON.stringify(value)) + note;
             }
-            return [...tokens, token];
-        }
-
-        function formatTokenSummary(token) {
-            return JSON.stringify(token, null, 2)
-                .replaceAll('\n', '<br/>\n')
-                .replaceAll('\n  ', '\n&nbsp;&nbsp;')
-                .replaceAll(new RegExp(': "(([^"]{25})[^"]{10,}([^"]{6}))"', 'ig'),
-                    ': "$2...<button class="btn btn-sm btn-secondary" title="Copy to clipboard" onclick=\'copy_to_buffer("$1")\'>Copy</button>"');
-        }
-
-        function renderTokenDetails(token) {
-            const tokenTypes = [
-                { label: 'ID Token', key: 'id_token' },
-                { label: 'Access Token', key: 'access_token' },
-                { label: 'Refresh Token', key: 'refresh_token' }
-            ];
-            return tokenTypes.map(({ label, key }) =>
-                `<b>${label}:</b><br/>\n${decode_token(token[key])}<br/>\n`
-            ).join('');
-        }
-
-        function print_tokens() {
-            const tokens = read_tokens();
-
-            if (tokens.length === 0) {
-                $('#tokens-report').html('<p style="color: var(--color-neutral-500);">No tokens stored. Complete the login flow to get tokens.</p>');
-                updateTokensDisplay();
-                return;
+            const isArray = Array.isArray(value);
+            const entries = isArray ? value.map((v, i) => [i, v]) : Object.entries(value);
+            const [open, close] = isArray ? ['[', ']'] : ['{', '}'];
+            if (entries.length === 0) return open + close + note;
+            // Short lists of plain values (scopes) stay on one line.
+            if (isArray && value.every(v => typeof v !== 'object' && String(v).length <= 40)) {
+                return escapeHtml(JSON.stringify(value).replaceAll(',', ', ')) + note;
             }
+            const lines = entries.map(([key, v], i) =>
+                pad(indent + 1) + (isArray ? '' : escapeHtml(JSON.stringify(key)) + ': ') +
+                jsonHtml(v, { truncate, annotate }, [...path, key], indent + 1) + (i < entries.length - 1 ? ',' : ''));
+            return open + note + '<br/>\n' + lines.join('<br/>\n') + '<br/>\n' + pad(indent) + close;
+        }
 
-            const html = tokens.map((token, i) => `
-                <div class="token-item">
-                    <div class="token-summary">${formatTokenSummary(token)}</div>
+        // epochMs 0: an access token the app marked as no longer accepted (after a 401).
+        function expiryNote(epochMs) {
+            if (!epochMs) return ' <span class="text-red">(invalidated)</span>';
+            const date = new Date(epochMs);
+            return ` <span class="${date < new Date() ? 'text-red' : 'text-green'}">(${escapeHtml(date.toISOString())})</span>`;
+        }
+
+        function formatTimestamp(epochSeconds, label, checkExpiry) {
+            const date = new Date(epochSeconds * 1000);
+            const className = checkExpiry ? (date < new Date() ? 'text-red' : 'text-green') : '';
+            return `<tr><td>${label}:</td><td class="${className}">${escapeHtml(date.toISOString())}</td></tr>\n`;
+        }
+
+        // Times and decoded parts of a JWT (an encrypted refresh token shows its header only).
+        function decodeToken(token) {
+            const payload = decodeJwtPayload(token) || {};
+            let timeinfo = '';
+            if (payload.auth_time) timeinfo += formatTimestamp(payload.auth_time, 'Auth Time', false);
+            if (payload.exp) timeinfo += formatTimestamp(payload.exp, 'Expires', true);
+            if (payload.iat) timeinfo += formatTimestamp(payload.iat, 'Issued', false);
+            if (timeinfo === '') timeinfo = '<tr><td>Expires:</td><td>-</td></tr>\n';
+            const parts = token.split('.').map(part => {
+                let decoded;
+                try {
+                    decoded = jsonHtml(decodeJwtPart(part), { truncate: false });
+                } catch {
+                    decoded = escapeHtml(part.substring(0, 10)) + '...';
+                }
+                return `<tr><td></td><td>${decoded}</td></tr>\n`;
+            }).join('');
+            return '<table>\n' + timeinfo + parts + '</table>\n';
+        }
+
+        function renderTokenDetails(tokens) {
+            return tokens.filter(([, token]) => token)
+                .map(([label, token]) => `<b>${escapeHtml(label)}:</b><br/>\n${decodeToken(token)}<br/>\n`).join('');
+        }
+
+        function tokenItem({ detailId, title, summary, actions, details, inTests }) {
+            return `
+                <div class="token-item${inTests ? ' in-tests' : ''}">
+                    ${title ? `<div class="token-title">${title}</div>` : ''}
+                    <div class="token-summary">${summary}</div>
                     <div class="token-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="$('#token_detail_${i}').toggle()">Details</button>
-                        <button class="btn btn-sm btn-secondary" onclick="refresh_token(${i})">Refresh Token</button>
-                        <button class="btn btn-sm btn-secondary" onclick="delete_token(${i})">Delete</button>
+                        ${actionButton('Details', { action: 'details', detail: detailId })}
+                        ${actions}
                     </div>
-                    <div class="token-details" style="display:none" id="token_detail_${i}">
-                        ${renderTokenDetails(token)}
+                    <div class="token-details" id="${detailId}"${openDetails.has(detailId) ? '' : ' style="display:none"'}>
+                        ${details}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+        }
+
+        function isSource(effective, source) {
+            return Boolean(effective) && Object.keys(source).every(k => effective[k] === source[k]);
+        }
+
+        // The session as stored, with the actions of each grant on its line.
+        function renderAppSession(idKey, session, index, effective) {
+            const identity = identityOfKey(idKey);
+            const annotate = (path, value) => {
+                if (path.length === 2 && path[0] === 'grants') {
+                    const grantKey = path[1];
+                    const inTests = isSource(effective, { kind: 'app', idKey, grantKey });
+                    return ' ' + actionButton('Refresh Token', { action: 'refresh-app', id: idKey, grant: grantKey }, Boolean(identity && value?.refreshToken)) +
+                        ' ' + actionButton(inTests ? 'In tests' : 'Use in tests', { action: 'use-app', id: idKey, grant: grantKey }, !inTests);
+                }
+                if (path.length === 3 && path[0] === 'grants' && path[2] === 'expiresAt') return expiryNote(value);
+                return '';
+            };
+            const grants = Object.entries(session?.grants || {});
+            const title = `<b>${escapeHtml(identity ? identity.name : 'Identity unknown to this page: refresh disabled')}</b> ` +
+                `<span class="muted">${escapeHtml(idKey)}</span>`;
+            return tokenItem({
+                detailId: 'app_detail_' + index,
+                title,
+                summary: jsonHtml(session, { annotate }),
+                actions: actionButton('Forget Session', { action: 'forget-app', id: idKey }),
+                details: renderTokenDetails([
+                    ['ID Token', session?.idToken],
+                    ...grants.flatMap(([grantKey, grant]) => [
+                        ['Access Token (' + grantKey + ')', grant?.accessToken],
+                        ['Refresh Token (' + grantKey + ')', grant?.refreshToken]
+                    ])
+                ])
+            });
+        }
+
+        function renderPageToken(token, index, effective) {
+            const inTests = isSource(effective, { kind: 'page', index });
+            return tokenItem({
+                detailId: 'page_detail_' + index,
+                summary: jsonHtml(token),
+                inTests,
+                actions: [
+                    actionButton('Refresh Token', { action: 'refresh-page', index }, Boolean(token.refresh_token && token.token_endpoint)),
+                    actionButton(inTests ? 'In tests' : 'Use in tests', { action: 'use-page', index }, !inTests),
+                    actionButton('Delete', { action: 'delete-page', index })
+                ].join('\n'),
+                details: renderTokenDetails([
+                    ['ID Token', token.id_token],
+                    ['Access Token', token.access_token],
+                    ['Refresh Token', token.refresh_token]
+                ])
+            });
+        }
+
+        function renderTokens() {
+            copyValues = [];
+            const effective = resolveTestTokens().source;
+            const sessions = Object.entries(readAppSessions());
+            const pageTokens = readPageTokens();
+
+            let html = '<h3 class="tokens-group-title">App sessions <code>aiza:auth:sessions</code></h3>';
+            html += sessions.length
+                ? sessions.map(([idKey, session], index) => renderAppSession(idKey, session, index, effective)).join('')
+                : '<p class="muted">No app sessions: sign in in the app.</p>';
+            html += '<h3 class="tokens-group-title">Tokens of this page <code>jwttest_tokens</code></h3>';
+            html += pageTokens.length
+                ? pageTokens.map((token, index) => renderPageToken(token, index, effective)).join('')
+                : '<p class="muted">None: complete steps 1 and 2 to get tokens here.</p>';
 
             $('#tokens-report').html(html);
             updateTokensDisplay();
         }
 
-        function delete_token(index) {
-            if (!confirm('Delete this token?')) return;
-            const tokens = read_tokens();
-            tokens.splice(index, 1);
-            write_tokens(tokens);
-            print_tokens();
-        }
-
-        function copy_to_buffer(s) {
-            navigator.clipboard.writeText(s).catch(console.error);
-        }
-
-        function formatTimestamp(epochSeconds, label, checkExpiry) {
-            const date = new Date(epochSeconds * 1000);
-            const isExpired = checkExpiry && date < new Date();
-            const className = checkExpiry ? (isExpired ? 'text-red' : 'text-green') : '';
-            return `<tr><td>${label}:</td><td class="${className}">${date.toISOString()}</td></tr>\n`;
-        }
-
-        function decode_token(s) {
-            const parts = s.split('.');
-            let res = '';
-            let timeinfo = '';
-
-            for (const p of parts) {
-                try {
-                    const j = JSON.parse(atob(p));
-                    res += '<tr><td></td><td>' +
-                        JSON.stringify(j, null, 2)
-                            .replaceAll('\n', '<br/>\n')
-                            .replaceAll('\n  ', '\n&nbsp;&nbsp;')
-                        + '</td></tr>\n';
-                    if (j.auth_time) timeinfo += formatTimestamp(j.auth_time, 'Auth Time', false);
-                    if (j.exp) timeinfo += formatTimestamp(j.exp, 'Expires', true);
-                    if (j.iat) timeinfo += formatTimestamp(j.iat, 'Issued', false);
-                } catch (error) {
-                    res += '<tr><td></td><td>' + p.substring(0, 10) + '...</td><tr/>\n';
+        async function onTokenAction(button) {
+            const data = button.dataset;
+            switch (data.action) {
+                case 'copy':
+                    navigator.clipboard.writeText(copyValues[Number(data.copy)]).catch(console.error);
+                    return;
+                case 'details': {
+                    const id = data.detail;
+                    if (openDetails.has(id)) openDetails.delete(id);
+                    else openDetails.add(id);
+                    $('#' + id).toggle(openDetails.has(id));
+                    return;
                 }
+                case 'use-app':
+                    testSource = { kind: 'app', idKey: data.id, grantKey: data.grant };
+                    renderTokens();
+                    return;
+                case 'use-page':
+                    testSource = { kind: 'page', index: Number(data.index) };
+                    renderTokens();
+                    return;
+                case 'delete-page':
+                    if (!confirm('Delete this token?')) return;
+                    return runTokenAction(button, async () => deletePageToken(Number(data.index)));
+                case 'forget-app':
+                    if (!confirm('Remove this session from the app? Its refresh tokens are revoked; every app tab using this identity is signed out.')) return;
+                    return runTokenAction(button, () => forgetAppSession(data.id));
+                case 'refresh-app':
+                    return runTokenAction(button, () => refreshAppGrant(data.id, data.grant));
+                case 'refresh-page':
+                    return runTokenAction(button, () => refreshPageToken(Number(data.index)));
             }
+        }
 
-            if (timeinfo === '') {
-                timeinfo = '<tr><td>Expires:</td><td>-</td></td>\n';
+        async function runTokenAction(button, action) {
+            $(button).prop('disabled', true);
+            setStatus('#tokens-status', 'pending', 'Working…');
+            try {
+                setStatus('#tokens-status', 'success', await action());
+            } catch (error) {
+                console.error(error);
+                setStatus('#tokens-status', 'error', error.message);
+            } finally {
+                renderTokens();
             }
-            return '<table>\n' + timeinfo + res + '</table>\n';
         }
 
-        // ============================================
-        // PKCE & Token Exchange Functions (existing)
-        // ============================================
-        async function sha256AndBase64(input) {
-            const buffer = new TextEncoder().encode(input);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-            const hashArray = new Uint8Array(hashBuffer);
-            const base64String = btoa(String.fromCharCode.apply(null, hashArray));
-            return base64String.replace('+', '-').replace('/', '_').replace(/=+$/, '');
+        // Same lock as the app's TokenBroker: one refresh per identity across
+        // all tabs, so a rotated refresh token is never used twice.
+        function withRefreshLock(idKey, fn) {
+            return navigator.locks?.request ? navigator.locks.request('aiza:refresh:' + idKey, fn) : fn();
         }
 
-        function generateRandomString(length) {
-            const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            return Array.from({ length }, () => charset[Math.floor(Math.random() * charset.length)]).join('');
-        }
+        // Refreshes one grant of an app session the way the app's TokenBroker
+        // does (src/auth/tokenBroker.ts refreshLocked + session.ts tokensToGrant).
+        async function refreshAppGrant(idKey, grantKey) {
+            const identity = identityOfKey(idKey);
+            if (!identity) throw new Error('Identity unknown to this page: not refreshed');
 
-        function guess_redirect_url() {
-            return location.host === 'localhost:3000'
-                ? 'http://localhost:3000/jwttest.html'
-                : 'https://aiza.bin932.com/jwttest.html';
-        }
+            return withRefreshLock(idKey, async () => {
+                // Read inside the lock: an app tab may have refreshed meanwhile.
+                const session = readAppSessions()[idKey];
+                const grant = session?.grants?.[grantKey];
+                if (!grant) throw new Error('The grant is gone');
+                if (!grant.refreshToken) throw new Error('The grant has no refresh token');
 
-        function getToken(code, codeVerifier) {
-            const url = getTokenEndpointUrl();
-            const clientId = $('#client-id-input').val().trim() || DEFAULT_CLIENT_ID;
-            const formData = new URLSearchParams();
-            formData.append("redirect_uri", guess_redirect_url());
-            formData.append("client_id", clientId);
-            formData.append("code", code);
-            formData.append("grant_type", "authorization_code");
-            formData.append("code_verifier", codeVerifier);
-
-            return fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: formData
-            }).then(r => {
-                if (r.ok) {
-                    return r.json().then(data => {
-                        console.log(JSON.stringify(data, null, 2));
-                        return data;
-                    });
+                const config = await discover(identity.issuer);
+                const response = await postForm(config.token_endpoint, {
+                    grant_type: 'refresh_token',
+                    client_id: identity.clientId,
+                    refresh_token: grant.refreshToken
+                });
+                // A rejected refresh is only reported: the app drops the grant
+                // itself the next time it needs the token.
+                if (!response.ok) throw new Error('Refresh rejected: HTTP ' + response.status + ' ' + await response.text());
+                const tokens = await response.json();
+                if (typeof tokens.access_token !== 'string' || typeof tokens.expires_in !== 'number') {
+                    throw new Error('Unexpected token response');
                 }
-                console.error(r);
-                r.text().then(console.error);
-                return null;
+
+                const idClaims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null;
+                if (idClaims) {
+                    const audiences = Array.isArray(idClaims.aud) ? idClaims.aud : [idClaims.aud];
+                    if (idClaims.iss !== identity.issuer || !audiences.includes(identity.clientId)) {
+                        throw new Error('ID token was issued for a different identity provider or client');
+                    }
+                }
+                const accessClaims = decodeJwtPayload(tokens.access_token);
+                const sub = typeof idClaims?.sub === 'string' ? idClaims.sub
+                    : typeof accessClaims?.sub === 'string' ? accessClaims.sub : session.sub;
+                if (sub !== session.sub) throw new Error('Identity provider returned tokens for a different user');
+
+                // Compare-and-set: only into the same session generation.
+                const current = readAppSessions()[idKey];
+                if (!current || current.id !== session.id || !current.grants?.[grantKey]) {
+                    throw new Error('Signed out or signed in again while refreshing: tokens discarded');
+                }
+                const scope = typeof accessClaims?.scope === 'string' ? accessClaims.scope : tokens.scope;
+                const refreshToken = tokens.refresh_token || grant.refreshToken;
+                const next = {
+                    ...current,
+                    grants: {
+                        ...current.grants,
+                        [grantKey]: {
+                            scopes: scope ? scope.split(' ').filter(Boolean) : grant.scopes,
+                            ...(refreshToken ? { refreshToken } : {}),
+                            accessToken: tokens.access_token,
+                            expiresAt: Date.now() + tokens.expires_in * 1000
+                        }
+                    }
+                };
+                if (tokens.id_token) {
+                    next.idToken = tokens.id_token;
+                    next.claims = {
+                        sub,
+                        ...(typeof idClaims.email === 'string' ? { email: idClaims.email } : {}),
+                        ...(typeof idClaims.name === 'string' ? { name: idClaims.name } : {}),
+                        ...(typeof idClaims['cognito:username'] === 'string' ? { username: idClaims['cognito:username'] } : {})
+                    };
+                }
+                writeAppSession(idKey, next);
+                return 'Refreshed grant "' + grantKey + '" of ' + identity.name +
+                    (tokens.refresh_token ? ' (refresh token rotated)' : '') + '; app tabs notified';
             });
         }
 
+        // Like TokenBroker.forget: removes the session on this device and
+        // revokes its refresh tokens (best effort).
+        async function forgetAppSession(idKey) {
+            const session = readAppSessions()[idKey];
+            if (!session) return 'Already removed';
+            writeAppSession(idKey, null);
+
+            const identity = identityOfKey(idKey);
+            if (!identity) return 'Session removed (identity unknown to this page: refresh tokens not revoked)';
+            const refreshTokens = [...new Set(Object.values(session.grants || {}).map(g => g.refreshToken).filter(Boolean))];
+            try {
+                const config = await discover(identity.issuer);
+                if (!config.revocation_endpoint) return 'Session removed (no revocation endpoint)';
+                const results = await Promise.allSettled(refreshTokens.map(token => postForm(config.revocation_endpoint, {
+                    token,
+                    token_type_hint: 'refresh_token',
+                    client_id: identity.clientId
+                })));
+                const revoked = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+                return `Session removed; ${revoked} of ${refreshTokens.length} refresh tokens revoked`;
+            } catch {
+                return 'Session removed (identity provider unreachable: refresh tokens not revoked)';
+            }
+        }
+
+        async function refreshPageToken(index) {
+            const token = readPageTokens()[index];
+            if (!token?.refresh_token || !token.token_endpoint) throw new Error('No refresh token');
+            const response = await postForm(token.token_endpoint, {
+                grant_type: 'refresh_token',
+                client_id: token.client_id,
+                refresh_token: token.refresh_token
+            });
+            if (!response.ok) throw new Error('Refresh rejected: HTTP ' + response.status + ' ' + await response.text());
+            const data = await response.json();
+
+            const tokens = readPageTokens();
+            const i = tokens.findIndex(t => t.refresh_token === token.refresh_token);
+            if (i < 0) throw new Error('The token was deleted meanwhile');
+            tokens[i] = {
+                ...tokens[i],
+                ...data,
+                id_token: data.id_token || tokens[i].id_token,
+                refresh_token: data.refresh_token || tokens[i].refresh_token
+            };
+            writePageTokens(tokens);
+            return 'Refreshed token #' + (i + 1);
+        }
+
+        function deletePageToken(index) {
+            const tokens = readPageTokens();
+            tokens.splice(index, 1);
+            writePageTokens(tokens);
+            if (testSource?.kind === 'page') testSource = null;
+            return 'Deleted';
+        }
+
+        // ============================================
+        // PKCE & Token Exchange
+        // ============================================
+        async function sha256AndBase64(input) {
+            const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input)));
+            return btoa(String.fromCharCode(...hash)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        function generateRandomString(length) {
+            const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            return Array.from(crypto.getRandomValues(new Uint32Array(length)), n => charset[n % charset.length]).join('');
+        }
+
         function generate_verifier() {
-            const randomString = generateRandomString(65);
-            console.log('new code_verifier', randomString);
-            localStorage.setItem('aiza_code_verifier', randomString);
+            localStorage.setItem(PAGE_VERIFIER_KEY, generateRandomString(65));
             load_verifier_fields();
             return false;
         }
 
         function load_verifier_fields() {
-            const code_verifier = localStorage.getItem('aiza_code_verifier');
+            const code_verifier = localStorage.getItem(PAGE_VERIFIER_KEY);
             $('input.code_verifier').val(code_verifier || '');
             $('.code_verifier').not('input').text(code_verifier || '(none - click Generate)');
             if (code_verifier) {
@@ -1293,95 +1709,71 @@
             }
         }
 
-        function exchange_code_to_token() {
+        async function exchange_code_to_token() {
+            const code = $('input.code').val().trim();
             const codeVerifier = $('input.code_verifier').val();
-            const code = $('input.code').val();
-            console.log("Exchange code to token code: ", code, "verifier:", codeVerifier);
-
-            getToken(code, codeVerifier).then(token => {
-                if (!token) return;
-                const tokens = merge_tokens(read_tokens(), token);
-                write_tokens(tokens);
-                localStorage.removeItem('aiza_code_verifier');
-                load_verifier_fields();
-                location.assign(guess_redirect_url());
+            const tokenEndpoint = authConfig?.tokenEndpoint;
+            if (!tokenEndpoint) {
+                alert('No token endpoint: the OpenID configuration of the selected backend is not loaded.');
+                return;
+            }
+            const clientId = $('#client-id-input').val().trim();
+            const response = await postForm(tokenEndpoint, {
+                grant_type: 'authorization_code',
+                client_id: clientId,
+                code,
+                code_verifier: codeVerifier,
+                redirect_uri: $('input.redirect_uri').val().trim()
             });
-        }
-
-        function refresh_token(index) {
-            var token = read_tokens()[index];
-            var payload = parse_payload(token.access_token);
-            var url = getTokenEndpointUrl();
-            var clientId = $('#client-id-input').val().trim() || payload.client_id;
-            var formData = new URLSearchParams();
-            formData.append("redirect_uri", guess_redirect_url())
-            formData.append("grant_type", "refresh_token");
-            formData.append("client_id", clientId);
-            formData.append("refresh_token", token.refresh_token);
-            return fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: formData
-            })
-                .then(r => {
-                    if (r.ok) {
-                        return r.json().then(data => {
-                            console.log(JSON.stringify(data, null, 2));
-                            var list = read_tokens();
-                            var matchingTokens = list.filter(t => t.refresh_token == token.refresh_token);
-                            matchingTokens.forEach(t => {
-                                t.id_token = data.id_token;
-                                t.access_token = data.access_token;
-                                if (data.refresh_token) t.refresh_token = data.refresh_token;
-                            });
-                            if (matchingTokens.length == 0) {
-                                token.id_token = data.id_token;
-                                token.access_token = data.access_token;
-                                if (data.refresh_token) token.refresh_token = data.refresh_token;
-                                list = [...list, token]
-                            }
-                            write_tokens(list);
-                            print_tokens();
-                            return data;
-                        });
-                    } else {
-                        console.error(r);
-                        r.text().then(console.error);
-                        alert('Token refresh failed. See console for details.');
-                        return null;
-                    }
-                });
+            if (!response.ok) {
+                const text = await response.text();
+                console.error(text);
+                alert('Token exchange failed: HTTP ' + response.status + '\n' + text);
+                return;
+            }
+            const data = await response.json();
+            writePageTokens(mergePageToken(readPageTokens(), {
+                ...data,
+                client_id: clientId,
+                token_endpoint: tokenEndpoint,
+                obtained_at: Date.now()
+            }));
+            localStorage.removeItem(PAGE_VERIFIER_KEY);
+            // Drop ?code= from the address.
+            location.assign(location.origin + location.pathname);
         }
 
         // ============================================
         // Initialization
         // ============================================
         function init() {
+            $('input.redirect_uri').val(location.origin + location.pathname);
             initBackendSelector();
-
-            print_tokens();
-            updateTokensDisplay();
             load_verifier_fields();
-            $('input.redirect_uri').val(guess_redirect_url());
-            $('#scope-input').val(DEFAULT_SCOPE);
 
-            var matches = location.href.match('code=([^&]+)');
-            if (matches) {
-                $('input.code').val(matches[1]);
+            const code = new URLSearchParams(location.search).get('code');
+            if (code) {
+                $('input.code').val(code);
                 document.getElementById('exchange-section').scrollIntoView({ behavior: 'smooth' });
             }
 
             $('#run-all-tests').on('click', runAllTests);
             $('#clear-results').on('click', clearTestResults);
+            $('#reload-tokens').on('click', renderTokens);
+            $('#tokens-report').on('click', 'button[data-action]', function () {
+                onTokenAction(this);
+            });
+
+            // Sessions changed by app tabs (sign-in, refresh, sign-out) or by
+            // other tabs of this page.
+            window.addEventListener('storage', event => {
+                if (event.key === null || event.key === APP_SESSIONS_KEY || event.key === PAGE_TOKENS_KEY) renderTokens();
+            });
 
             $('#pkce-form').on('submit', function () {
                 const authUrl = $('#authorization-url-input').val().trim();
                 if (authUrl) $(this).attr('action', authUrl);
             });
-
-            console.log("JWT Debug page initialized at " + location.href);
         }
 
         $(init);
